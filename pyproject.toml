@@ -1,0 +1,13 @@
+[project]
+name = "workflow-slms"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "huggingface-hub>=1.14.0",
+    "llama-cpp-python[server]>=0.3.22",
+    "openai>=2.35.0",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+]
