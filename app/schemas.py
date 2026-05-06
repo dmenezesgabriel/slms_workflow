@@ -60,3 +60,9 @@ class ClassificationResult(BaseModel):
             return confidence / 100.0
 
         return confidence
+
+
+class ImageDescription(BaseModel):
+    description: str
+    visible_objects: list[str] = Field(default_factory=list)
+    visible_text: list[str] = Field(default_factory=list)

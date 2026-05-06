@@ -16,7 +16,7 @@ class OpenAILocalClient:
         self,
         base_url: str = "http://127.0.0.1:8080/v1",
         api_key: str = "sk-local",
-        timeout: float = 120.0,
+        timeout: float = 180.0,
     ) -> None:
         self.client = OpenAI(
             base_url=base_url,
@@ -57,7 +57,7 @@ class OpenAILocalClient:
         last_error: Exception | None = None
 
         for attempt in range(retries + 1):
-            messages = [
+            messages: list[dict[str, Any]] = [
                 {
                     "role": "system",
                     "content": (

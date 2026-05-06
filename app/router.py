@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import re
+
 from app.llm_client import LLMRequest
 from app.model_registry import MODEL_REGISTRY
 from app.schemas import IntentClassification
+
+
+_IMAGE_REF_PATTERN = re.compile(r"@\S+\.(?:png|jpg|jpeg|webp|bmp|gif)", re.IGNORECASE)
+
+
+def contains_image_reference(text: str) -> bool:
+    return _IMAGE_REF_PATTERN.search(text) is not None
 
 
 def deterministic_route(text: str) -> str | None:
@@ -10,6 +19,9 @@ def deterministic_route(text: str) -> str | None:
 
     if not q:
         return "unclassified"
+
+    if contains_image_reference(text):
+        return "image_understanding"
 
     if len(q) <= 2:
         return "general"

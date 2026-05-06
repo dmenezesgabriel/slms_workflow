@@ -7,12 +7,14 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
+MessageContent = str | list[dict[str, Any]]
+
 
 @dataclass(frozen=True)
 class LLMRequest:
     model: str
     system: str
-    user: str
+    user: MessageContent
     temperature: float = 0.0
     max_tokens: int = 256
     tools: list[dict[str, Any]] | None = None
