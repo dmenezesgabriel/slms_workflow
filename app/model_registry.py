@@ -38,25 +38,14 @@ MODEL_REGISTRY = {
     ),
     "question_answering": ModelProfile(
         model=QWEN35_08B_TEXT,
-        system=(
-            "You answer questions concisely and directly. "
-            "If you are uncertain, say so."
-        ),
+        system=("You answer questions concisely and directly. " "If you are uncertain, say so."),
         max_tokens=256,
         temperature=0.1,
     ),
     "function_calling": ModelProfile(
         model=QWEN35_08B_TEXT,
-        system=(
-            "You extract tool calls from user requests. "
-            "Available tools: calculator. "
-            "ALWAYS use the calculator tool for ANY arithmetic. "
-            "Convert natural language math to a Python expression: "
-            "'plus'->'+', 'minus'->'-', 'times'->'*', 'divided by'->'/', 'squared'->'**2'. "
-            "Return needs_tool=true, tool_name='calculator', arguments={'expression': '<python expr>'}. "
-            "Return needs_tool=false only if the request has no arithmetic at all. "
-            "Return only valid JSON matching the requested schema."
-        ),
+        # Tool list is injected dynamically by the handler via tool_prompt()
+        system="You select and invoke a tool to fulfill the user's request.",
         max_tokens=192,
         temperature=0.0,
     ),
@@ -66,7 +55,7 @@ MODEL_REGISTRY = {
             "You classify user input into a concise label. "
             "Return only valid JSON matching the requested schema."
         ),
-        max_tokens=128,
+        max_tokens=192,
         temperature=0.0,
     ),
     "image_understanding": ModelProfile(
@@ -87,14 +76,20 @@ MODEL_REGISTRY = {
     "agent": ModelProfile(
         model=QWEN35_08B_TEXT,
         system=(
-            "You are a minimal task planner. Given a task and previous steps, "
-            "decide the next action. "
-            "Available actions: question_answering, summarization, function_calling, "
-            "classification, final_answer. "
-            "Use final_answer with a complete answer when the task is done. "
+            "You are a task planner. Choose one action per step.\n"
+            "Actions:\n"
+            "  web_search — action_input = the search query (words only)\n"
+            "  web_fetch  — action_input = https:// URL\n"
+            "  wikipedia  — action_input = topic name\n"
+            "  calculator — action_input = math expression like '3+4*2'\n"
+            "  summarize  — action_input = 'key findings' (uses previous result)\n"
+            "  classify   — action_input = category type (uses previous result)\n"
+            "  answer     — action_input = the question (uses previous result)\n"
+            "  final_answer — action_input = your complete answer; set is_final=true\n"
+            "Once you have tool results, use final_answer immediately.\n"
             "Return only valid JSON matching the schema."
         ),
-        max_tokens=192,
+        max_tokens=256,
         temperature=0.0,
     ),
 }

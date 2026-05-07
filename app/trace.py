@@ -28,7 +28,11 @@ def handler_end(intent: str, t0: float) -> None:
     _emit("handler.end", intent=intent, elapsed_ms=round((time.monotonic() - t0) * 1000))
 
 
-def tool_call(tool_name: str, arguments: dict) -> None:
+def retrieval(source: str, query: str) -> None:
+    _emit("retrieval", source=source, query=query[:80])
+
+
+def tool_call(tool_name: str, arguments: dict[str, Any]) -> None:
     _emit("tool.call", tool=tool_name, args=arguments)
 
 
@@ -42,3 +46,7 @@ def agent_step(step_n: int, thought: str, action: str, action_input: str) -> Non
 
 def agent_final(steps_taken: int) -> None:
     _emit("agent.final", steps=steps_taken)
+
+
+def workflow_step(workflow: str, step_n: int, intent: str, step_input: str) -> None:
+    _emit("workflow.step", workflow=workflow, n=step_n, intent=intent, input=step_input[:80])

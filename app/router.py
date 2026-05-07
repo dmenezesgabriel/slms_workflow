@@ -6,48 +6,102 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from app import trace
 from app.llm_client import LLMClient, LLMRequest
 from app.model_registry import MODEL_REGISTRY
-from app.schemas import IntentClassification
-from app import trace
+from app.schemas import IntentClassification, IntentName
 
 _IMAGE_REF_PATTERN = re.compile(r"@\S+\.(?:png|jpg|jpeg|webp|bmp|gif)", re.IGNORECASE)
 
 _FAST_ROUTE_THRESHOLD = 0.25
 _LLM_FALLBACK_THRESHOLD = 0.60
 
-# Phrases that anchor each intent. Adding more phrases here improves coverage — no retraining needed.
-_INTENT_EXAMPLES: dict[str, list[str]] = {
+# Phrases that anchor each intent. Adding phrases here improves coverage — no retraining needed.
+_INTENT_EXAMPLES: dict[IntentName, list[str]] = {
     "summarization": [
-        "summarize this", "give me a summary", "tl;dr", "sum this up",
-        "brief summary", "condense this", "make it shorter", "abstract",
-        "resuma", "resumo disso", "can you summarize",
+        "summarize this",
+        "give me a summary",
+        "tl;dr",
+        "sum this up",
+        "brief summary",
+        "condense this",
+        "make it shorter",
+        "abstract",
+        "resuma",
+        "resumo disso",
+        "can you summarize",
     ],
     "question_answering": [
-        "what is the capital", "who invented", "how does this work", "why does",
-        "when did this happen", "where is located", "explain to me", "tell me about",
-        "could you explain", "help me understand", "qual é a capital", "como funciona",
-        "o que é", "I want to know about", "can you tell me",
+        "what is the capital",
+        "who invented",
+        "how does this work",
+        "why does",
+        "when did this happen",
+        "where is located",
+        "explain to me",
+        "tell me about",
+        "could you explain",
+        "help me understand",
+        "qual é a capital",
+        "como funciona",
+        "o que é",
+        "I want to know about",
+        "can you tell me",
     ],
     "function_calling": [
-        "calculate", "compute this", "what is 3 plus 5", "run the tool",
-        "evaluate this expression", "math problem", "add these numbers",
-        "multiply", "divide by", "what is 2 times 3", "calcule", "resultado de",
+        "calculate",
+        "compute this",
+        "what is 3 plus 5",
+        "run the tool",
+        "evaluate this expression",
+        "math problem",
+        "add these numbers",
+        "multiply",
+        "divide by",
+        "what is 2 times 3",
+        "calcule",
+        "resultado de",
+        "search for",
+        "search the web for",
+        "look up",
+        "fetch the url",
+        "fetch this page",
+        "look up on wikipedia",
+        "find information about",
     ],
     "classification": [
-        "classify this text", "determine the category", "label this text",
-        "detect the sentiment", "is this positive or negative",
-        "what type of text is this", "categorize this", "assign a label",
-        "find the category", "determine intent of this text",
+        "classify this text",
+        "determine the category",
+        "label this text",
+        "detect the sentiment",
+        "is this positive or negative",
+        "what type of text is this",
+        "categorize this",
+        "assign a label",
+        "find the category",
+        "determine intent of this text",
     ],
     "image_understanding": [
-        "what is in this image", "describe the picture", "analyze this photo",
-        "what do you see", "look at this image", "read this screenshot",
+        "what is in this image",
+        "describe the picture",
+        "analyze this photo",
+        "what do you see",
+        "look at this image",
+        "read this screenshot",
         "what does the image show",
     ],
     "general": [
-        "hello", "hi there", "hey", "good morning", "good evening",
-        "how are you", "what can you do", "thanks", "thank you", "oi", "olá",
+        "hello",
+        "hi there",
+        "hey",
+        "good morning",
+        "good evening",
+        "how are you",
+        "what can you do",
+        "thanks",
+        "thank you",
+        "oi",
+        "olá",
     ],
 }
 
@@ -55,7 +109,7 @@ _INTENT_EXAMPLES: dict[str, list[str]] = {
 class _MLRouter:
     def __init__(self) -> None:
         examples: list[str] = []
-        labels: list[str] = []
+        labels: list[IntentName] = []
 
         for intent, phrases in _INTENT_EXAMPLES.items():
             examples.extend(phrases)
@@ -65,7 +119,7 @@ class _MLRouter:
         self._vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=1, sublinear_tf=True)
         self._matrix = self._vectorizer.fit_transform(examples)
 
-    def classify(self, text: str) -> tuple[str, float]:
+    def classify(self, text: str) -> tuple[IntentName, float]:
         # Classify on the first 100 chars — intent is at the start, content words dilute signal
         snippet = text[:100].lower()
         vec = self._vectorizer.transform([snippet])

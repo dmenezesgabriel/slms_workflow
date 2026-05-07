@@ -11,3 +11,4 @@ wheels/
 
 models/*
 !models/.gitkeep
+.flake8

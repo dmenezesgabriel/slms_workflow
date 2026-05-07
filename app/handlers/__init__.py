@@ -4,7 +4,6 @@ from typing import Callable
 
 from pydantic import BaseModel
 
-from app.llm_client import LLMClient
 from app.handlers import (
     classification,
     function_calling,
@@ -13,6 +12,7 @@ from app.handlers import (
     question_answering,
     summarization,
 )
+from app.llm_client import LLMClient
 
 Handler = Callable[[str, LLMClient], BaseModel]
 

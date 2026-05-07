@@ -4,7 +4,6 @@ from pathlib import Path
 
 from huggingface_hub import hf_hub_download
 
-
 MODELS_DIR = Path("models")
 
 REPO_ID = "unsloth/Qwen3.5-0.8B-GGUF"

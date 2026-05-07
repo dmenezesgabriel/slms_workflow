@@ -4,6 +4,7 @@ import base64
 import mimetypes
 import re
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -29,10 +30,13 @@ def _to_data_url(path: Path) -> str:
     return f"data:{mime_type or 'image/png'};base64,{encoded}"
 
 
-def _build_user_content(user_input: str, image_path: Path) -> list[dict]:
+def _build_user_content(user_input: str, image_path: Path) -> list[dict[str, Any]]:
     text = _strip_image_refs(user_input) or "Describe what you see in this image."
     return [
-        {"type": "text", "text": text + "\nBe concise. Mention visible objects, visible text, and layout."},
+        {
+            "type": "text",
+            "text": text + "\nBe concise. Mention visible objects, visible text, and layout.",
+        },
         {"type": "image_url", "image_url": {"url": _to_data_url(image_path)}},
     ]
 
@@ -52,7 +56,8 @@ def handle(user_input: str, llm: LLMClient) -> BaseModel:
     return llm.structured(
         LLMRequest(
             model=profile.model,
-            system=profile.system + " Return JSON with description, visible_objects, and visible_text.",
+            system=profile.system
+            + " Return JSON with description, visible_objects, and visible_text.",
             user=_build_user_content(user_input, image_path),
             max_tokens=profile.max_tokens,
             temperature=profile.temperature,

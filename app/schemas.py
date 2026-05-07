@@ -4,17 +4,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+IntentName = Literal[
+    "summarization",
+    "question_answering",
+    "function_calling",
+    "classification",
+    "image_understanding",
+    "general",
+    "unclassified",
+]
+
 
 class IntentClassification(BaseModel):
-    intent: Literal[
-        "summarization",
-        "question_answering",
-        "function_calling",
-        "classification",
-        "image_understanding",
-        "general",
-        "unclassified",
-    ]
+    intent: IntentName
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str
 
@@ -37,7 +39,9 @@ class SummaryResult(BaseModel):
 
 class ToolDecision(BaseModel):
     needs_tool: bool
-    tool_name: str | None = None
+    # Always a string so constrained JSON generation is forced to emit a value.
+    # Use "none" when no tool is needed.
+    tool_name: str = "none"
     arguments: dict[str, Any] = Field(default_factory=dict)
     reason: str
 
@@ -71,10 +75,13 @@ class ImageDescription(BaseModel):
 class AgentStep(BaseModel):
     thought: str
     action: Literal[
-        "question_answering",
-        "summarization",
-        "function_calling",
-        "classification",
+        "web_search",
+        "web_fetch",
+        "wikipedia",
+        "calculator",
+        "summarize",
+        "classify",
+        "answer",
         "final_answer",
     ]
     action_input: str

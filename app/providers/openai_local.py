@@ -82,18 +82,16 @@ class OpenAILocalClient:
                     }
                 )
 
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions.create(  # type: ignore[call-overload]
                 model=request.model,
                 messages=messages,
                 temperature=0.0,
                 max_tokens=request.max_tokens,
                 response_format={
                     "type": "json_object",
-                    "schema": json_schema,
+                    "schema": json_schema,  # llama.cpp extension, not in openai stubs
                 },
-                extra_body={
-                    "seed": 42,
-                },
+                extra_body={"seed": 42},
             )
 
             content = response.choices[0].message.content or ""
