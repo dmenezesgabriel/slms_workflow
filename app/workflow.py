@@ -34,7 +34,8 @@ def run_workflow(workflow: Workflow, user_input: str, llm: LLMClient) -> BaseMod
     result: BaseModel = FinalAnswer(answer="")
 
     for i, step in enumerate(workflow.steps):
-        step_input = step.input_format.format(input=current)
+        # {input} = current pipeline value; {query} = original user request (always available)
+        step_input = step.input_format.format(input=current, query=user_input)
         # Keep the model's context window safe for processing steps.
         if i > 0 and len(step_input) > _MAX_STEP_INPUT_CHARS:
             step_input = step_input[:_MAX_STEP_INPUT_CHARS]
@@ -80,7 +81,7 @@ WORKFLOW_REGISTRY: dict[str, Workflow] = {
         description="Look up a topic on Wikipedia then answer a question about it",
         steps=(
             Step("function_calling", "look up the Wikipedia article about {input}"),
-            Step("question_answering", "{input}"),
+            Step("question_answering", "Context:\n{input}\n\nQuestion: {query}"),
         ),
     ),
 }

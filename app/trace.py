@@ -50,3 +50,12 @@ def agent_final(steps_taken: int) -> None:
 
 def workflow_step(workflow: str, step_n: int, intent: str, step_input: str) -> None:
     _emit("workflow.step", workflow=workflow, n=step_n, intent=intent, input=step_input[:80])
+
+
+def ner(text: str, entities: list[tuple[str, str]]) -> None:
+    _emit("ner", text=text, entities=entities)
+
+
+def fast_path(kind: str, detail: str) -> None:
+    """Emitted when a deterministic shortcut bypasses the LLM."""
+    _emit("fast_path", kind=kind, detail=detail[:80])

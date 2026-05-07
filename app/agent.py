@@ -48,7 +48,14 @@ def _execute_step(
         r = None
 
     if r is not None:
-        return r.result if r.success else f"Error: {r.error}"
+        from app.scoring import score_result
+
+        if r.success:
+            s = score_result(r.result)
+            if not s.is_usable:
+                trace.agent_step(0, f"low quality result ({s.reason})", action, inp)
+            return r.result
+        return f"Error: {r.error}"
 
     # Processing actions consume the previous step's result as context
     prev = history[-1][1] if history else ""
@@ -95,6 +102,29 @@ def _force_answer(user_input: str, steps: list[tuple[AgentStep, str]], llm: LLMC
 
 
 def run_agent(user_input: str, llm: LLMClient, max_steps: int = 5) -> BaseModel:
+    # Fast path: deterministic math — avoids the model mis-routing arithmetic to web_search
+    from app.handlers.function_calling import _extract_math
+    from app.tools import TOOL_REGISTRY
+
+    expression = _extract_math(user_input)
+    if expression is not None and "calculator" in TOOL_REGISTRY:
+        calc_result = execute(
+            ToolDecision(
+                needs_tool=True,
+                tool_name="calculator",
+                arguments={"expression": expression},
+                reason="Deterministic math extraction.",
+            )
+        )
+        if calc_result.success:
+            seed = AgentStep(
+                thought="Computed from math expression.",
+                action="calculator",
+                action_input=expression,
+                is_final=False,
+            )
+            return _force_answer(user_input, [(seed, calc_result.result)], llm)
+
     steps: list[tuple[AgentStep, str]] = []
     profile = MODEL_REGISTRY["agent"]
 
@@ -111,7 +141,7 @@ def run_agent(user_input: str, llm: LLMClient, max_steps: int = 5) -> BaseModel:
         )
         trace.agent_step(step_n + 1, step.thought, step.action, step.action_input)
 
-        if step.is_final or step.action == "final_answer":
+        if step.action == "final_answer":
             trace.agent_final(step_n + 1)
             return FinalAnswer(answer=step.action_input)
 

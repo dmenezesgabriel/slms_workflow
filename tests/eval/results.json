@@ -1,0 +1,136 @@
+[
+  {
+    "timestamp": "2026-05-07T10:37:43.042317+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 34,
+      "total": 34,
+      "latency_p50_ms": 0.44,
+      "latency_p95_ms": 0.56
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": null
+  },
+  {
+    "timestamp": "2026-05-07T10:39:48.633215+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 34,
+      "total": 34,
+      "latency_p50_ms": 0.45,
+      "latency_p95_ms": 0.58
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
+  },
+  {
+    "timestamp": "2026-05-07T10:42:12.637667+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 34,
+      "total": 34,
+      "latency_p50_ms": 0.45,
+      "latency_p95_ms": 0.63
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
+  },
+  {
+    "timestamp": "2026-05-07T10:43:44.437914+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 34,
+      "total": 34,
+      "latency_p50_ms": 0.48,
+      "latency_p95_ms": 0.68
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
+  },
+  {
+    "timestamp": "2026-05-07T10:44:24.422936+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 34,
+      "total": 34,
+      "latency_p50_ms": 0.45,
+      "latency_p95_ms": 0.56
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
+  },
+  {
+    "timestamp": "2026-05-07T11:30:04.455949+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 34,
+      "total": 34,
+      "latency_p50_ms": 0.44,
+      "latency_p95_ms": 0.55
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
+  }
+]

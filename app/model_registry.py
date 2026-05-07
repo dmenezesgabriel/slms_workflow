@@ -52,7 +52,9 @@ MODEL_REGISTRY = {
     "classification": ModelProfile(
         model=QWEN35_08B_TEXT,
         system=(
-            "You classify user input into a concise label. "
+            "You assign a SHORT label (1-5 words, snake_case) to user input. "
+            "Examples: programming_language, positive_sentiment, news_article, financial_report. "
+            "The label field must be a short category name, never a long description. "
             "Return only valid JSON matching the requested schema."
         ),
         max_tokens=192,

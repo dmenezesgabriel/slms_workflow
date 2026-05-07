@@ -81,8 +81,16 @@ def execute(decision: ToolDecision) -> ToolResult:
     trace.tool_call(name, decision.arguments)
     try:
         result = spec.fn(decision.arguments)
-        trace.tool_result(name, True, result[:120])
-        return ToolResult(success=True, tool_name=name, result=result)
+        from app.scoring import score_result
+
+        score = score_result(result)
+        trace.tool_result(name, score.is_usable, result[:120])
+        return ToolResult(
+            success=score.is_usable,
+            tool_name=name,
+            result=result,
+            error=None if score.is_usable else score.reason,
+        )
     except Exception as exc:
         trace.tool_result(name, False, str(exc))
         return ToolResult(success=False, tool_name=name, result="", error=str(exc))

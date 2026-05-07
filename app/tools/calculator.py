@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
+import math
 import operator
+import re
 from typing import Any, Callable
 
 _OpFn = Callable[..., int | float]
@@ -21,6 +23,19 @@ _UNARY_OPS: dict[type[ast.unaryop], _OpFn] = {
     ast.UAdd: operator.pos,
 }
 
+_MATH_FNS: dict[str, Callable[[float], float]] = {
+    "sqrt": math.sqrt,
+    "abs": abs,
+    "ceil": math.ceil,
+    "floor": math.floor,
+    "log": math.log,
+    "log2": math.log2,
+    "log10": math.log10,
+}
+
+# Strip "= <answer>" suffix that models sometimes append (e.g. "sqrt(144) = 12")
+_TRAILING_RESULT = re.compile(r"\s*=\s*[\d.]+\s*$")
+
 
 def _eval_node(node: ast.AST) -> int | float:
     if isinstance(node, ast.Expression):
@@ -37,6 +52,12 @@ def _eval_node(node: ast.AST) -> int | float:
         if unary_op not in _UNARY_OPS:
             raise ValueError(f"Operator not allowed: {unary_op.__name__}")
         return _UNARY_OPS[unary_op](_eval_node(node.operand))
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name) or node.func.id not in _MATH_FNS:
+            raise ValueError(f"Function not allowed: {ast.unparse(node.func)}")
+        if len(node.args) != 1 or node.keywords:
+            raise ValueError("Math functions take exactly one argument")
+        return _MATH_FNS[node.func.id](float(_eval_node(node.args[0])))
     raise ValueError(f"Expression not allowed: {type(node).__name__}")
 
 
@@ -44,4 +65,6 @@ def run(arguments: dict[str, Any]) -> str:
     expression = arguments.get("expression")
     if not isinstance(expression, str):
         raise ValueError("arguments.expression must be a string")
-    return str(_eval_node(ast.parse(expression, mode="eval")))
+    expression = _TRAILING_RESULT.sub("", expression).strip()
+    result = _eval_node(ast.parse(expression, mode="eval"))
+    return str(int(result) if isinstance(result, float) and result.is_integer() else result)

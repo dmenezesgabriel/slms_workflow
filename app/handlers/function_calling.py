@@ -4,6 +4,7 @@ import re
 
 from pydantic import BaseModel
 
+from app import trace
 from app.llm_client import LLMClient, LLMRequest
 from app.model_registry import MODEL_REGISTRY
 from app.schemas import FinalAnswer, ToolDecision
@@ -12,6 +13,7 @@ from app.tools import TOOL_REGISTRY, execute, tool_prompt
 # ── Deterministic math extraction ──────────────────────────────────────────────
 
 _NL_OPS: dict[str, str] = {
+    # English
     "plus": "+",
     "minus": "-",
     "times": "*",
@@ -22,6 +24,14 @@ _NL_OPS: dict[str, str] = {
     "modulo": "%",
     "to the power of": "**",
     "squared": "** 2",
+    # Portuguese
+    "mais": "+",
+    "menos": "-",
+    "vezes": "*",
+    "multiplicado por": "*",
+    "dividido por": "/",
+    "elevado a": "**",
+    "ao quadrado": "** 2",
 }
 _NL_OPS_PAT = "|".join(re.escape(k) for k in _NL_OPS)
 _NL_OP_RE = re.compile(
@@ -58,6 +68,11 @@ _WIKI_LOOKUP_RE = re.compile(
     r"(?:article|page)\s+(?:about|on|for)\s+(.+)",
     re.IGNORECASE,
 )
+# "look up Python on Wikipedia" / "find OpenAI on Wikipedia"
+_WIKI_ON_RE = re.compile(
+    r"(?:look\s+up|find|search)\s+(.+?)\s+on\s+wikipedia",
+    re.IGNORECASE,
+)
 _FETCH_RE = re.compile(r"(?:fetch|get|retrieve|open)\s+(https?://\S+)", re.IGNORECASE)
 
 
@@ -71,7 +86,7 @@ def _deterministic_tool(text: str) -> ToolDecision | None:
             reason="Deterministic search pattern.",
         )
 
-    m = _WIKI_ABOUT_RE.search(text) or _WIKI_LOOKUP_RE.search(text)
+    m = _WIKI_ABOUT_RE.search(text) or _WIKI_LOOKUP_RE.search(text) or _WIKI_ON_RE.search(text)
     if m:
         topic = re.sub(r"^(?:the|a|an)\s+", "", m.group(1).strip(), flags=re.IGNORECASE)
         return ToolDecision(
@@ -91,6 +106,41 @@ def _deterministic_tool(text: str) -> ToolDecision | None:
         )
 
     return None
+
+
+# ── NER fast path ─────────────────────────────────────────────────────────────
+# Covers entity-centric queries that don't match the explicit patterns above,
+# e.g. "Tell me about OpenAI" / "Quem é Linus Torvalds?"
+
+_LOOKUP_INTENT_RE = re.compile(
+    r"\b(what|who|where|when|tell me|explain|describe|about|"
+    r"o que|quem|onde|quando|sobre|explica|explique|"
+    r"me\s+(?:fale?|conte?|diga?|diz|explique?))\b",
+    re.IGNORECASE,
+)
+
+
+def _ner_tool(text: str) -> ToolDecision | None:
+    from app import ner
+    from app.fuzzy import normalize_query
+
+    entities = ner.lookup_entities(text)
+    if not entities:
+        return None
+
+    is_lookup = bool(_LOOKUP_INTENT_RE.search(text))
+    if not is_lookup:
+        return None
+
+    entity = entities[0]
+    query = normalize_query(entity.text)
+    tool = "web_search" if ner.is_temporal(text) else "wikipedia"
+    return ToolDecision(
+        needs_tool=True,
+        tool_name=tool,
+        arguments={"query": query},
+        reason=f"NER {entity.label}: {query!r}.",
+    )
 
 
 # ── System prompt (LLM fallback only) ─────────────────────────────────────────
@@ -116,10 +166,27 @@ def _dispatch(decision: ToolDecision) -> BaseModel:
     return FinalAnswer(answer=f"Tool execution failed for {result.tool_name}: {result.error}")
 
 
+def deterministic_decision(user_input: str) -> ToolDecision | None:
+    """Return a ToolDecision using only deterministic paths (math + regex + NER), no LLM.
+
+    Returns None when no deterministic path matches — useful for offline eval.
+    """
+    expression = _extract_math(user_input)
+    if expression is not None and "calculator" in TOOL_REGISTRY:
+        return ToolDecision(
+            needs_tool=True,
+            tool_name="calculator",
+            arguments={"expression": expression},
+            reason="Deterministic math extraction.",
+        )
+    return _deterministic_tool(user_input) or _ner_tool(user_input)
+
+
 def handle(user_input: str, llm: LLMClient) -> BaseModel:
     # Fast path 1: math expression
     expression = _extract_math(user_input)
     if expression is not None and "calculator" in TOOL_REGISTRY:
+        trace.fast_path("math_regex", expression)
         return _dispatch(
             ToolDecision(
                 needs_tool=True,
@@ -132,6 +199,13 @@ def handle(user_input: str, llm: LLMClient) -> BaseModel:
     # Fast path 2: explicit tool patterns (search / wikipedia / fetch)
     decision = _deterministic_tool(user_input)
     if decision is not None:
+        trace.fast_path("regex_tool", decision.tool_name)
+        return _dispatch(decision)
+
+    # Fast path 3: NER entity extraction — covers entity-centric queries
+    decision = _ner_tool(user_input)
+    if decision is not None:
+        trace.fast_path("ner_entity", decision.tool_name)
         return _dispatch(decision)
 
     # LLM path: model handles genuinely ambiguous or compound requests

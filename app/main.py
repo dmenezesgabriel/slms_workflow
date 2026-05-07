@@ -7,6 +7,7 @@ from typing import Callable
 from pydantic import BaseModel
 
 from app.agent import run_agent
+from app.fuzzy import match_workflow
 from app.handlers import HANDLER_REGISTRY
 from app.llm_client import LLMClient
 from app.providers.openai_local import OpenAILocalClient
@@ -50,7 +51,10 @@ def main() -> None:
     llm = OpenAILocalClient()
 
     if args.workflow:
-        selected = WORKFLOW_REGISTRY.get(args.workflow)
+        resolved = match_workflow(args.workflow, WORKFLOW_REGISTRY)
+        if resolved != args.workflow and resolved is not None:
+            print(f"Resolved workflow {args.workflow!r} → {resolved!r}")
+        selected = WORKFLOW_REGISTRY.get(resolved or "")
         if selected is None:
             print(f"Unknown workflow: {args.workflow!r}", file=sys.stderr)
             print(f"Available: {', '.join(WORKFLOW_REGISTRY)}", file=sys.stderr)

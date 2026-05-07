@@ -27,12 +27,21 @@ _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
         "condense this",
         "make it shorter",
         "abstract",
+        "can you summarize",
+        # pt_BR
         "resuma",
         "resumo disso",
-        "can you summarize",
+        "resume este texto",
+        "me dá um resumo",
+        "resumo deste",
+        "pode resumir",
+        "faça um resumo",
     ],
     "question_answering": [
         "what is the capital",
+        "what is machine learning",
+        "what is Docker",
+        "what is a neural network",
         "who invented",
         "how does this work",
         "why does",
@@ -42,9 +51,19 @@ _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
         "tell me about",
         "could you explain",
         "help me understand",
+        # pt_BR
         "qual é a capital",
         "como funciona",
         "o que é",
+        "quem é",
+        "quem foi",
+        "me fale sobre",
+        "me conta sobre",
+        "me explique",
+        "onde fica",
+        "por que",
+        "quando foi",
+        "me diga sobre",
         "I want to know about",
         "can you tell me",
     ],
@@ -130,6 +149,23 @@ class _MLRouter:
 
 
 _ml_router = _MLRouter()
+
+
+def classify_ml(user_input: str) -> IntentClassification | None:
+    """Run only the TF-IDF fast path; returns None when score is below threshold.
+
+    Useful for offline evaluation and testing without an LLM connection.
+    """
+    if not user_input.strip():
+        return IntentClassification(intent="unclassified", confidence=1.0, reason="Empty input.")
+    if _IMAGE_REF_PATTERN.search(user_input):
+        return IntentClassification(
+            intent="image_understanding", confidence=1.0, reason="Image path detected."
+        )
+    intent, score = _ml_router.classify(user_input)
+    if score >= _FAST_ROUTE_THRESHOLD:
+        return IntentClassification(intent=intent, confidence=score, reason="ML router match.")
+    return None
 
 
 def route_task(user_input: str, llm: LLMClient) -> IntentClassification:
