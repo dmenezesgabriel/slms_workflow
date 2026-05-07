@@ -60,6 +60,12 @@ ROUTING_CASES: list[tuple[str, str, str]] = [
     # general — pt
     ("olá", "general", "pt"),
     ("oi", "general", "pt"),
+    # N04 regression: temporal news queries must route to function_calling, not general
+    ("What are the latest news about OpenAI?", "function_calling", "en"),
+    ("recent news on Python 3.13", "function_calling", "en"),
+    ("current news about artificial intelligence", "function_calling", "en"),
+    ("últimas notícias sobre inteligência artificial", "function_calling", "pt"),
+    ("notícias recentes sobre Python", "function_calling", "pt"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -110,6 +116,68 @@ NER_CASES: list[tuple[str, list[tuple[str, str]]]] = [
     ("Me fale sobre o Rio de Janeiro", [("Rio de Janeiro", "LOC")]),
     ("Quem é Guido van Rossum?", [("Guido", "PER")]),
     ("Me conta sobre a Amazônia", [("Amazônia", "LOC")]),
+]
+
+# ---------------------------------------------------------------------------
+# Temporal signal ground truth — used to score is_temporal() accuracy.
+# (text, is_temporal: bool)
+# ---------------------------------------------------------------------------
+
+TEMPORAL_CASES: list[tuple[str, bool]] = [
+    # True — should be detected as temporal
+    ("What are the latest news about OpenAI?", True),
+    ("recent news on Python 3.13", True),
+    ("current news about artificial intelligence", True),
+    ("últimas notícias sobre inteligência artificial", True),
+    ("notícias recentes sobre Python", True),
+    ("what is happening today in AI?", True),
+    ("atualização mais recente do Python", True),
+    # False — should NOT be detected as temporal
+    ("what is the capital of France", False),
+    ("explain quantum computing", False),
+    ("how does photosynthesis work", False),
+    ("what is machine learning", False),
+    ("hello there", False),
+    ("o que é Python?", False),
+    ("quem é Linus Torvalds?", False),
+]
+
+# ---------------------------------------------------------------------------
+# Summarization guard cases — used to score the content guard in handler.
+# (prompt, should_guard_block: bool)
+# If True, the guard must stop before calling the LLM.
+# ---------------------------------------------------------------------------
+
+SUMMARIZATION_GUARD_CASES: list[tuple[str, bool]] = [
+    # Should be blocked — no actual text to summarize
+    ("summarize this text for me", True),
+    ("summarize", True),
+    ("tl;dr", True),
+    ("give me a summary", True),
+    ("summary", True),
+    ("resuma", True),
+    # Should NOT be blocked — enough content after stripping the trigger
+    ("summarize this: " + "important word " * 10, False),
+    ("tl;dr: " + "some content here " * 5, False),
+]
+
+# ---------------------------------------------------------------------------
+# QA proper-noun extraction cases — used to score the N09 fallback.
+# (prompt, expected_extracted_entity or None if no extraction expected)
+# ---------------------------------------------------------------------------
+
+QA_PROPER_NOUN_CASES: list[tuple[str, str | None]] = [
+    # Should extract entity
+    ("What is spaCy?", "spaCy"),
+    ("What is FastAPI?", "FastAPI"),
+    ("What is LangChain?", "LangChain"),
+    ("What is Docker?", "Docker"),
+    ("o que é LangChain?", "LangChain"),
+    ("What is GitHub?", "GitHub"),
+    ("What is OpenAI?", "OpenAI"),
+    # Should NOT extract (no "what is" pattern or no proper noun)
+    ("how does Python work?", None),
+    ("what is the capital of France", None),
 ]
 
 # ---------------------------------------------------------------------------

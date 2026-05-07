@@ -12,6 +12,18 @@ from app.tools import web_fetch, web_search, wikipedia
 
 _URL_PATTERN = re.compile(r"https?://\S+")
 
+# Matches "what is / what are / o que é" patterns used for entity lookups.
+_WHAT_IS_RE = re.compile(
+    r"\b(what\s+is|what\s+are|what's|o\s+que\s+[eé]|o\s+que\s+s[aã]o)\b",
+    re.IGNORECASE,
+)
+# Likely proper-noun tokens: PascalCase compounds (FastAPI, LangChain), camelCase (spaCy),
+# or simple Title-case (Docker).  The first alternative catches any word with 2+ uppercase
+# letters; the second catches camelCase; the third catches plain Title-case.
+_PROPER_NOUN_RE = re.compile(
+    r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*|[a-z]+[A-Z][a-zA-Z]+|[A-Z][a-z]{2,})\b"
+)
+
 # Signals that the answer requires external or time-sensitive knowledge (en + pt).
 # Kept narrow — broad question-word patterns match too many general-knowledge queries.
 _RETRIEVAL_SIGNALS = re.compile(
@@ -70,6 +82,21 @@ def _fetch_context(user_input: str) -> str:
         raw = web_search.run({"query": entity.text, "max_results": 3})
         trace.retrieval("web_search", entity.text)
         return context.compress(raw, query=user_input, max_sentences=_MAX_CONTEXT_SENTENCES)
+
+    # Fallback: niche entities not recognized by the NER model (e.g. library/tool names).
+    # Only triggers for "what is X" patterns where X looks like a proper noun.
+    # Search AFTER the "what is" match to skip question-word tokens like "What".
+    wi_match = _WHAT_IS_RE.search(user_input)
+    if wi_match:
+        m = _PROPER_NOUN_RE.search(user_input, wi_match.end())
+        if m:
+            candidate = m.group(1)
+            wiki = wikipedia.run({"query": candidate})
+            if "No Wikipedia article" not in wiki and "failed" not in wiki.lower():
+                trace.retrieval("wikipedia", candidate)
+                return context.compress(
+                    wiki, query=user_input, max_sentences=_MAX_CONTEXT_SENTENCES
+                )
 
     return ""
 

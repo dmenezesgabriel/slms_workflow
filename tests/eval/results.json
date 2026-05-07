@@ -132,5 +132,74 @@
       "found": 10,
       "total_expected": 10
     }
+  },
+  {
+    "timestamp": "2026-05-07T17:15:50.396244+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 39,
+      "total": 39,
+      "latency_p50_ms": 2.14,
+      "latency_p95_ms": 4.01
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 0.0,
+      "found": 0,
+      "total_expected": 10
+    }
+  },
+  {
+    "timestamp": "2026-05-07T17:16:33.962781+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 39,
+      "total": 39,
+      "latency_p50_ms": 2.62,
+      "latency_p95_ms": 7.73
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
+  },
+  {
+    "timestamp": "2026-05-07T17:19:26.744639+00:00",
+    "routing": {
+      "accuracy": 1.0,
+      "en_accuracy": 1.0,
+      "pt_accuracy": 1.0,
+      "correct": 39,
+      "total": 39,
+      "latency_p50_ms": 2.23,
+      "latency_p95_ms": 3.79
+    },
+    "tool": {
+      "tool_accuracy": 1.0,
+      "arg_accuracy": 1.0,
+      "correct": 14,
+      "total": 14
+    },
+    "ner": {
+      "recall": 1.0,
+      "found": 10,
+      "total_expected": 10
+    }
   }
 ]

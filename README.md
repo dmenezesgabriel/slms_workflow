@@ -20,3 +20,10 @@ uv run python -m app.main
 # Interactive REPL with agent loop
 uv run python -m app.main --agent
 ```
+
+## Requirements
+
+```sh
+sudo apt update
+sudo apt install -y build-essential python3-dev cmake ninja-build
+```

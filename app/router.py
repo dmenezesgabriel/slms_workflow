@@ -87,6 +87,12 @@ _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
         "fetch this page",
         "look up on wikipedia",
         "find information about",
+        "latest news about",
+        "recent news on",
+        "current news about",
+        # pt_BR
+        "últimas notícias sobre",
+        "notícias recentes",
     ],
     "classification": [
         "classify this text",

@@ -20,13 +20,24 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "behave>=1.3.3",
     "black>=26.3.1",
     "flake8>=7.3.0",
     "isort>=8.0.1",
+    "mlflow>=3.12.0",
     "mypy>=2.0.0",
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
+    "pytest-cov>=6.0.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast isolated tests (no LLM, no network)",
+    "integration: requires llama.cpp server at 127.0.0.1:8080",
+]
+addopts = "-m 'not integration'"
 
 [tool.black]
 target-version = ["py311"]
