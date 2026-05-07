@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.context import extract_text
-from app.main import run
+from src.context import extract_text
+from src.main import run
 
 
 @pytest.mark.integration

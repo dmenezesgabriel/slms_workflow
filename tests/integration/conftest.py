@@ -26,6 +26,6 @@ def llm_client():
     """Return an OpenAILocalClient, skipping the session if the server is unreachable."""
     if not _llm_server_available():
         pytest.skip("LLM server not available at 127.0.0.1:8080 — start llama.cpp first")
-    from app.providers.openai_local import OpenAILocalClient
+    from src.providers.openai_local import OpenAILocalClient
 
     return OpenAILocalClient()

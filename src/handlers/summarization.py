@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+import re
+
+from pydantic import BaseModel
+
+from src.llm_client import LLMClient, LLMRequest
+from src.model_registry import MODEL_REGISTRY
+from src.schemas import FinalAnswer, SummaryResult
+
+_TRIGGER_PREFIX = re.compile(
+    r"^(summarize[:\s]+|summary[:\s]+|tl;dr[:\s]+|resuma[:\s]+|resumo[:\s]+)",
+    re.IGNORECASE,
+)
+_MIN_CONTENT_WORDS = 10
+
+
+def handle(user_input: str, llm: LLMClient) -> BaseModel:
+    text = _TRIGGER_PREFIX.sub("", user_input).strip()
+    if len(text.split()) < _MIN_CONTENT_WORDS:
+        return FinalAnswer(answer="No text provided to summarize.")
+    profile = MODEL_REGISTRY["summarization"]
+    return llm.structured(
+        LLMRequest(
+            model=profile.model,
+            system=profile.system,
+            user=f"Summarize this text:\n\n{text}",
+            max_tokens=profile.max_tokens,
+            temperature=profile.temperature,
+        ),
+        SummaryResult,
+    )
