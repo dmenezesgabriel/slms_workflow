@@ -66,3 +66,16 @@ class ImageDescription(BaseModel):
     description: str
     visible_objects: list[str] = Field(default_factory=list)
     visible_text: list[str] = Field(default_factory=list)
+
+
+class AgentStep(BaseModel):
+    thought: str
+    action: Literal[
+        "question_answering",
+        "summarization",
+        "function_calling",
+        "classification",
+        "final_answer",
+    ]
+    action_input: str
+    is_final: bool
