@@ -41,8 +41,9 @@ def step_llm_server_available(context: Any) -> None:
     context.llm_client = OpenAILocalClient()
 
 
+@when('I run the assistant with "{prompt}"')
 @when('I run the direct pipeline with "{prompt}"')
-def step_run_direct_pipeline(context: Any, prompt: str) -> None:
+def step_run_unified_assistant(context: Any, prompt: str) -> None:
     from src.context import extract_text
     from src.main import run
 

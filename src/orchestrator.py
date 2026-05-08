@@ -72,14 +72,21 @@ def run_direct(user_input: str, llm: LLMClient) -> BaseModel:
     return handler(user_input, llm)
 
 
-def run_assistant(user_input: str, llm: LLMClient) -> BaseModel:
+def run_assistant(
+    user_input: str,
+    llm: LLMClient,
+    conversation_context: str | None = None,
+) -> BaseModel:
     """Unified entrypoint: plan, compose, and run the best controlled path.
 
     The public UX is agent-like (one prompt in, one answer out), while this
     function keeps the backstage deterministic and composable: simple prompts go
-    through the classic router, obvious compound requests become on-demand
-    workflows, and ambiguous tool-heavy tasks fall back to the small planner
-    agent.
+    through the classic router, obvious compound requests become on-demand DAGs,
+    and ambiguous tool-heavy tasks fall back to the small planner agent.
+
+    Planning is always based on the current user turn so conversation history
+    does not dilute deterministic routing. When the selected path is a pure
+    language task, the recent conversation is appended as context for synthesis.
     """
 
     plan = plan_assistant(user_input, llm)
@@ -89,7 +96,9 @@ def run_assistant(user_input: str, llm: LLMClient) -> BaseModel:
         return run_dag_workflow(plan.graph, user_input, llm)
     if plan.strategy == "agent":
         return run_agent(user_input, llm)
-    return run_direct_with_intent(user_input, llm, plan.intent)
+    return run_direct_with_intent(
+        _contextualize(user_input, conversation_context, plan.intent), llm, plan.intent
+    )
 
 
 def run_direct_with_intent(
@@ -99,6 +108,22 @@ def run_direct_with_intent(
         return run_direct(user_input, llm)
     handler = HANDLER_REGISTRY.get(intent, HANDLER_REGISTRY["general"])
     return handler(user_input, llm)
+
+
+def _contextualize(
+    user_input: str,
+    conversation_context: str | None,
+    intent: IntentName | None,
+) -> str:
+    if not conversation_context:
+        return user_input
+    if intent not in {"question_answering", "general", "classification", "summarization"}:
+        return user_input
+    return (
+        "Recent conversation context:\n"
+        f"{conversation_context}\n\n"
+        f"Current user request: {user_input}"
+    )
 
 
 def plan_assistant(user_input: str, llm: LLMClient) -> AssistantPlan:

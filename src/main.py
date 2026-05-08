@@ -14,19 +14,28 @@ from src.providers.openai_local import OpenAILocalClient
 from src.workflow import WORKFLOW_REGISTRY, run_workflow
 
 
-def run(user_input: str, llm: LLMClient | None = None) -> BaseModel:
-    """Unified public entrypoint used by CLI, tests, and integrations."""
+def run(
+    user_input: str,
+    llm: LLMClient | None = None,
+    conversation_context: str | None = None,
+) -> BaseModel:
+    """Unified public entrypoint used by CLI, tests, integrations, and chat."""
 
     llm = llm or OpenAILocalClient()
-    return run_assistant(user_input, llm)
+    return run_assistant(user_input, llm, conversation_context=conversation_context)
 
 
 def _print_result(result: BaseModel, as_json: bool) -> None:
     print(result.model_dump_json(indent=2) if as_json else extract_text(result))
 
 
-def _repl(dispatch: Dispatch, llm: LLMClient, as_json: bool) -> None:
-    print("SLM agent session. Type /exit to quit, /workflows to list workflows.")
+def _conversation_context(turns: list[tuple[str, str]], max_turns: int = 4) -> str:
+    return "\n".join(f"User: {u}\nAssistant: {a}" for u, a in turns[-max_turns:])
+
+
+def _repl(dispatch: Dispatch, llm: LLMClient, as_json: bool, use_conversation: bool) -> None:
+    print("SLM assistant session. Type /exit to quit, /workflows to inspect DAG workflows.")
+    turns: list[tuple[str, str]] = []
     while True:
         try:
             user_input = input("\nyou> ").strip()
@@ -38,21 +47,34 @@ def _repl(dispatch: Dispatch, llm: LLMClient, as_json: bool) -> None:
             for name, entry in WORKFLOW_REGISTRY.items():
                 print(f"  {name}: {entry.description}")
             continue
+        context = _conversation_context(turns) if use_conversation else None
+        result = (
+            run(user_input, llm, conversation_context=context)
+            if use_conversation
+            else dispatch(user_input, llm)
+        )
+        answer = extract_text(result)
         print("assistant> ", end="")
-        _print_result(dispatch(user_input, llm), as_json)
+        _print_result(result, as_json)
+        if use_conversation:
+            turns.append((user_input, answer))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Unified local SLM agent with deterministic on-demand workflows"
+        description="Unified local SLM assistant: one prompt engine for CLI and chat"
     )
-    parser.add_argument("prompt", nargs="?", help="Run a single prompt and exit")
-    parser.add_argument("--json", action="store_true", help="Print raw JSON result objects")
     parser.add_argument(
-        "--direct", action="store_true", help="Bypass orchestration and use router+handler"
+        "-p",
+        "--prompt",
+        metavar="PROMPT",
+        help="Run one prompt through the unified assistant and exit",
     )
-    parser.add_argument("--agent", action="store_true", help="Force the multi-step agentic loop")
-    parser.add_argument("--workflow", metavar="NAME", help="Force a predefined workflow by name")
+    parser.add_argument("--chat", action="store_true", help="Continue interactively after --prompt")
+    parser.add_argument("--json", action="store_true", help="Print raw JSON result objects")
+    parser.add_argument("--direct", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--agent", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--workflow", metavar="NAME", help=argparse.SUPPRESS)
     parser.add_argument(
         "--list-workflows", action="store_true", help="List available workflows and exit"
     )
@@ -82,11 +104,15 @@ def main() -> None:
     else:
         dispatch = run
 
-    if args.prompt:
-        _print_result(dispatch(args.prompt, llm), args.json)
-        return
+    use_conversation = dispatch is run
 
-    _repl(dispatch, llm, args.json)
+    if args.prompt is not None:
+        result = dispatch(args.prompt, llm)
+        _print_result(result, args.json)
+        if not args.chat:
+            return
+
+    _repl(dispatch, llm, args.json, use_conversation=use_conversation)
 
 
 if __name__ == "__main__":
