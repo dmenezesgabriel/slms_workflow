@@ -7,15 +7,22 @@ from src.model_registry import MODEL_REGISTRY
 from src.schemas import ClassificationResult
 
 
-def handle(user_input: str, llm: LLMClient) -> BaseModel:
-    profile = MODEL_REGISTRY["classification"]
-    return llm.structured(
-        LLMRequest(
-            model=profile.model,
-            system=profile.system,
-            user=user_input,
-            max_tokens=profile.max_tokens,
-            temperature=profile.temperature,
-        ),
-        ClassificationResult,
-    )
+class ClassificationHandler:
+    intent = "classification"
+
+    def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        profile = MODEL_REGISTRY["classification"]
+        return llm.structured(
+            LLMRequest(
+                model=profile.model,
+                system=profile.system,
+                user=user_input,
+                max_tokens=profile.max_tokens,
+                temperature=profile.temperature,
+            ),
+            ClassificationResult,
+        )
+
+
+_handler = ClassificationHandler()
+handle = _handler.handle

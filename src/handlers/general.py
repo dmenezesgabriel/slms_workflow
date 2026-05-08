@@ -7,15 +7,22 @@ from src.model_registry import MODEL_REGISTRY
 from src.schemas import FinalAnswer
 
 
-def handle(user_input: str, llm: LLMClient) -> BaseModel:
-    profile = MODEL_REGISTRY["general"]
-    return llm.structured(
-        LLMRequest(
-            model=profile.model,
-            system=profile.system,
-            user=user_input,
-            max_tokens=profile.max_tokens,
-            temperature=profile.temperature,
-        ),
-        FinalAnswer,
-    )
+class GeneralHandler:
+    intent = "general"
+
+    def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        profile = MODEL_REGISTRY["general"]
+        return llm.structured(
+            LLMRequest(
+                model=profile.model,
+                system=profile.system,
+                user=user_input,
+                max_tokens=profile.max_tokens,
+                temperature=profile.temperature,
+            ),
+            FinalAnswer,
+        )
+
+
+_handler = GeneralHandler()
+handle = _handler.handle

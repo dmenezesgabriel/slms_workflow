@@ -1,27 +1,37 @@
 from __future__ import annotations
 
-from typing import Callable
+from typing import Sequence
 
 from pydantic import BaseModel
 
-from src.handlers import (
-    classification,
-    function_calling,
-    general,
-    image_understanding,
-    question_answering,
-    summarization,
-)
+from src.handlers.base import Handler
+from src.handlers.classification import ClassificationHandler
+from src.handlers.function_calling import FunctionCallingHandler
+from src.handlers.general import GeneralHandler
+from src.handlers.image_understanding import ImageUnderstandingHandler
+from src.handlers.question_answering import QuestionAnsweringHandler
+from src.handlers.summarization import SummarizationHandler
 from src.llm_client import LLMClient
 
-Handler = Callable[[str, LLMClient], BaseModel]
 
-HANDLER_REGISTRY: dict[str, Handler] = {
-    "summarization": summarization.handle,
-    "question_answering": question_answering.handle,
-    "function_calling": function_calling.handle,
-    "classification": classification.handle,
-    "image_understanding": image_understanding.handle,
-    "general": general.handle,
-    "unclassified": general.handle,
-}
+class HandlerRegistry:
+    def __init__(self, handlers: Sequence[Handler]) -> None:
+        self._handlers: dict[str, Handler] = {h.intent: h for h in handlers}
+
+    def get(self, intent: str) -> Handler:
+        return self._handlers.get(intent, self._handlers["general"])
+
+    def dispatch(self, intent: str, user_input: str, llm: LLMClient) -> BaseModel:
+        return self.get(intent).handle(user_input, llm)
+
+
+HANDLER_REGISTRY = HandlerRegistry(
+    [
+        SummarizationHandler(),
+        QuestionAnsweringHandler(),
+        FunctionCallingHandler(),
+        ClassificationHandler(),
+        ImageUnderstandingHandler(),
+        GeneralHandler(),
+    ]
+)

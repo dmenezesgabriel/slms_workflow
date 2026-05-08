@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Mapping
+
+from huggingface_hub import hf_hub_download
 
 
 @dataclass(frozen=True)
@@ -13,9 +17,63 @@ class ModelProfile:
 
 QWEN35_08B_TEXT = "qwen3.5-0.8b-text"
 QWEN35_08B_VISION = "qwen3.5-0.8b-vision"
+QWEN25_05B_INSTRUCT = "qwen2.5-0.5b-instruct-q4km"
+SMOLLM2_360M_INSTRUCT = "smollm2-360m-instruct-q4km"
+MODELS_DIR = Path("models")
 
 
-MODEL_REGISTRY = {
+@dataclass(frozen=True)
+class ModelArtifact:
+    """A small GGUF artifact the project knows how to fetch and serve locally."""
+
+    alias: str
+    repo_id: str
+    filename: str
+    local_subdir: str
+    mmproj_filename: str | None = None
+
+    @property
+    def model_path(self) -> Path:
+        return MODELS_DIR / self.local_subdir / self.filename
+
+    @property
+    def mmproj_path(self) -> Path | None:
+        if self.mmproj_filename is None:
+            return None
+        return MODELS_DIR / self.local_subdir / self.mmproj_filename
+
+
+QWEN35_08B_ARTIFACT = ModelArtifact(
+    alias=QWEN35_08B_TEXT,
+    repo_id="unsloth/Qwen3.5-0.8B-GGUF",
+    filename="Qwen3.5-0.8B-UD-Q4_K_XL.gguf",
+    local_subdir="qwen3.5-0.8b",
+    mmproj_filename="mmproj-F16.gguf",
+)
+
+QWEN25_05B_ARTIFACT = ModelArtifact(
+    alias=QWEN25_05B_INSTRUCT,
+    repo_id="Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+    filename="qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    local_subdir="qwen2.5-0.5b-instruct",
+)
+
+SMOLLM2_360M_ARTIFACT = ModelArtifact(
+    alias=SMOLLM2_360M_INSTRUCT,
+    repo_id="bartowski/SmolLM2-360M-Instruct-GGUF",
+    filename="SmolLM2-360M-Instruct-Q4_K_M.gguf",
+    local_subdir="smollm2-360m-instruct",
+)
+
+MODEL_ARTIFACTS: dict[str, ModelArtifact] = {
+    QWEN35_08B_TEXT: QWEN35_08B_ARTIFACT,
+    QWEN35_08B_VISION: QWEN35_08B_ARTIFACT,
+    QWEN25_05B_INSTRUCT: QWEN25_05B_ARTIFACT,
+    SMOLLM2_360M_INSTRUCT: SMOLLM2_360M_ARTIFACT,
+}
+
+
+MODEL_REGISTRY: dict[str, ModelProfile] = {
     "router": ModelProfile(
         model=QWEN35_08B_TEXT,
         system=(
@@ -38,9 +96,18 @@ MODEL_REGISTRY = {
     ),
     "question_answering": ModelProfile(
         model=QWEN35_08B_TEXT,
-        system=("You answer questions concisely and directly. " "If you are uncertain, say so."),
+        system=(
+            "You answer questions concisely and directly. If context is provided, ground the "
+            "answer in that context and do not ignore named titles, entities, or evidence. "
+            "For 'which movie/book/song/work says ...' questions, identify the work/title, "
+            "not only the quoted value. When giving recommendations, prefer official/original "
+            "items unless the user asks for unofficial alternatives. When context includes an "
+            "inferred likely answer, include one short supporting detail from the evidence. "
+            "If the context is insufficient or "
+            "conflicting, say so."
+        ),
         max_tokens=256,
-        temperature=0.1,
+        temperature=0.0,
     ),
     "function_calling": ModelProfile(
         model=QWEN35_08B_TEXT,
@@ -95,3 +162,109 @@ MODEL_REGISTRY = {
         temperature=0.0,
     ),
 }
+
+
+_MODEL_ROLE_ALIASES = {
+    "qa": "question_answering",
+    "question-answering": "question_answering",
+    "function": "function_calling",
+    "tool": "function_calling",
+    "summary": "summarization",
+    "summarizer": "summarization",
+    "classifier": "classification",
+}
+
+
+def known_model_aliases() -> list[str]:
+    return sorted(MODEL_ARTIFACTS)
+
+
+def download_gguf(
+    *,
+    repo_id: str,
+    filename: str,
+    local_subdir: str,
+) -> Path:
+    target_dir = MODELS_DIR / local_subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    path = hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        local_dir=target_dir,
+    )
+
+    return Path(path)
+
+
+def download_artifact(artifact: ModelArtifact, *, include_mmproj: bool = False) -> list[Path]:
+    paths = [
+        download_gguf(
+            repo_id=artifact.repo_id,
+            filename=artifact.filename,
+            local_subdir=artifact.local_subdir,
+        )
+    ]
+    if include_mmproj and artifact.mmproj_filename is not None:
+        paths.append(
+            download_gguf(
+                repo_id=artifact.repo_id,
+                filename=artifact.mmproj_filename,
+                local_subdir=artifact.local_subdir,
+            )
+        )
+    return paths
+
+
+def ensure_model_available(model: str, *, auto_download: bool = True) -> Path | None:
+    """Ensure a known model alias/path exists locally.
+
+    For known project aliases, missing GGUF files are downloaded from Hugging
+    Face. Unknown OpenAI/llama.cpp aliases return None because there is no safe
+    way to infer a repo and GGUF filename from an alias alone.
+    """
+
+    maybe_path = Path(model)
+    if maybe_path.suffix == ".gguf":
+        if maybe_path.exists():
+            return maybe_path
+        raise FileNotFoundError(f"Model path does not exist: {model}")
+
+    artifact = MODEL_ARTIFACTS.get(model)
+    if artifact is None:
+        return None
+
+    if artifact.model_path.exists():
+        return artifact.model_path
+    if not auto_download:
+        raise FileNotFoundError(
+            f"Model alias {model!r} is known but {artifact.model_path} is missing"
+        )
+    return download_artifact(artifact, include_mmproj=model.endswith("vision"))[0]
+
+
+def apply_model_overrides(
+    *,
+    default_model: str | None = None,
+    role_models: Mapping[str, str | None] | None = None,
+) -> None:
+    """Override model aliases used by one or more specialist roles.
+
+    This keeps experimentation cheap: the same deterministic harness can be run
+    with different local llama.cpp aliases without changing prompts or code.
+    """
+
+    if default_model:
+        for role, profile in list(MODEL_REGISTRY.items()):
+            if role != "image_understanding":
+                MODEL_REGISTRY[role] = replace(profile, model=default_model)
+
+    for role, model in (role_models or {}).items():
+        if not model:
+            continue
+        normalized = _MODEL_ROLE_ALIASES.get(role, role)
+        if normalized not in MODEL_REGISTRY:
+            raise ValueError(
+                f"Unknown model role {role!r}. Available roles: {', '.join(MODEL_REGISTRY)}"
+            )
+        MODEL_REGISTRY[normalized] = replace(MODEL_REGISTRY[normalized], model=model)

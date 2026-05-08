@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -9,14 +7,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src import trace
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
+from src.patterns import IMAGE_REF_RE as _IMAGE_REF_PATTERN
 from src.schemas import IntentClassification, IntentName
-
-_IMAGE_REF_PATTERN = re.compile(r"@\S+\.(?:png|jpg|jpeg|webp|bmp|gif)", re.IGNORECASE)
 
 _FAST_ROUTE_THRESHOLD = 0.25
 _LLM_FALLBACK_THRESHOLD = 0.60
 
-# Phrases that anchor each intent. Adding phrases here improves coverage — no retraining needed.
 _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
     "summarization": [
         "summarize this",
@@ -28,7 +24,6 @@ _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
         "make it shorter",
         "abstract",
         "can you summarize",
-        # pt_BR
         "resuma",
         "resumo disso",
         "resume este texto",
@@ -51,7 +46,6 @@ _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
         "tell me about",
         "could you explain",
         "help me understand",
-        # pt_BR
         "qual é a capital",
         "como funciona",
         "o que é",
@@ -90,7 +84,6 @@ _INTENT_EXAMPLES: dict[IntentName, list[str]] = {
         "latest news about",
         "recent news on",
         "current news about",
-        # pt_BR
         "últimas notícias sobre",
         "notícias recentes",
     ],
@@ -145,76 +138,90 @@ class _MLRouter:
         self._matrix = self._vectorizer.fit_transform(examples)
 
     def classify(self, text: str) -> tuple[IntentName, float]:
-        # Classify on the first 100 chars — intent is at the start, content words dilute signal
         snippet = text[:100].lower()
         vec = self._vectorizer.transform([snippet])
         scores = cosine_similarity(vec, self._matrix)[0]
         best_idx = int(np.argmax(scores))
-        score = min(1.0, float(scores[best_idx]))  # clamp floating-point noise above 1.0
+        score = min(1.0, float(scores[best_idx]))
         return self._labels[best_idx], score
 
 
 _ml_router = _MLRouter()
 
 
-def classify_ml(user_input: str) -> IntentClassification | None:
-    """Run only the TF-IDF fast path; returns None when score is below threshold.
+class Router:
+    def classify_ml(self, user_input: str) -> IntentClassification | None:
+        if not user_input.strip():
+            return IntentClassification(
+                intent="unclassified", confidence=1.0, reason="Empty input."
+            )
+        if _IMAGE_REF_PATTERN.search(user_input):
+            return IntentClassification(
+                intent="image_understanding", confidence=1.0, reason="Image path detected."
+            )
+        intent, score = _ml_router.classify(user_input)
+        if score >= _FAST_ROUTE_THRESHOLD:
+            return IntentClassification(intent=intent, confidence=score, reason="ML router match.")
+        return None
 
-    Useful for offline evaluation and testing without an LLM connection.
-    """
-    if not user_input.strip():
-        return IntentClassification(intent="unclassified", confidence=1.0, reason="Empty input.")
-    if _IMAGE_REF_PATTERN.search(user_input):
-        return IntentClassification(
-            intent="image_understanding", confidence=1.0, reason="Image path detected."
+    def route(self, user_input: str, llm: LLMClient) -> IntentClassification:
+        if not user_input.strip():
+            return IntentClassification(
+                intent="unclassified", confidence=1.0, reason="Empty input."
+            )
+
+        if _IMAGE_REF_PATTERN.search(user_input):
+            return IntentClassification(
+                intent="image_understanding",
+                confidence=1.0,
+                reason="Image path reference detected.",
+            )
+
+        intent, score = _ml_router.classify(user_input)
+
+        if score >= _FAST_ROUTE_THRESHOLD:
+            result = IntentClassification(
+                intent=intent, confidence=score, reason="ML router match."
+            )
+            trace.route(result.intent, result.confidence, "ml")
+            return result
+
+        profile = MODEL_REGISTRY["router"]
+        result = llm.structured(
+            LLMRequest(
+                model=profile.model,
+                system=profile.system,
+                user=(
+                    "Classify this user input into one of: "
+                    "summarization, question_answering, function_calling, "
+                    "classification, image_understanding, general, unclassified.\n\n"
+                    f"User input: {user_input}"
+                ),
+                max_tokens=profile.max_tokens,
+                temperature=profile.temperature,
+            ),
+            IntentClassification,
         )
-    intent, score = _ml_router.classify(user_input)
-    if score >= _FAST_ROUTE_THRESHOLD:
-        return IntentClassification(intent=intent, confidence=score, reason="ML router match.")
-    return None
+
+        if result.confidence < _LLM_FALLBACK_THRESHOLD:
+            fallback = IntentClassification(
+                intent="general",
+                confidence=result.confidence,
+                reason=f"Low confidence fallback. Original: {result.reason}",
+            )
+            trace.route(fallback.intent, fallback.confidence, "llm-lowconf")
+            return fallback
+
+        trace.route(result.intent, result.confidence, "llm")
+        return result
+
+
+_router = Router()
+
+
+def classify_ml(user_input: str) -> IntentClassification | None:
+    return _router.classify_ml(user_input)
 
 
 def route_task(user_input: str, llm: LLMClient) -> IntentClassification:
-    if not user_input.strip():
-        return IntentClassification(intent="unclassified", confidence=1.0, reason="Empty input.")
-
-    if _IMAGE_REF_PATTERN.search(user_input):
-        return IntentClassification(
-            intent="image_understanding", confidence=1.0, reason="Image path reference detected."
-        )
-
-    intent, score = _ml_router.classify(user_input)
-
-    if score >= _FAST_ROUTE_THRESHOLD:
-        result = IntentClassification(intent=intent, confidence=score, reason="ML router match.")
-        trace.route(result.intent, result.confidence, "ml")
-        return result
-
-    profile = MODEL_REGISTRY["router"]
-    result = llm.structured(
-        LLMRequest(
-            model=profile.model,
-            system=profile.system,
-            user=(
-                "Classify this user input into one of: "
-                "summarization, question_answering, function_calling, "
-                "classification, image_understanding, general, unclassified.\n\n"
-                f"User input: {user_input}"
-            ),
-            max_tokens=profile.max_tokens,
-            temperature=profile.temperature,
-        ),
-        IntentClassification,
-    )
-
-    if result.confidence < _LLM_FALLBACK_THRESHOLD:
-        fallback = IntentClassification(
-            intent="general",
-            confidence=result.confidence,
-            reason=f"Low confidence fallback. Original: {result.reason}",
-        )
-        trace.route(fallback.intent, fallback.confidence, "llm-lowconf")
-        return fallback
-
-    trace.route(result.intent, result.confidence, "llm")
-    return result
+    return _router.route(user_input, llm)

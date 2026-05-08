@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 
 from pydantic import BaseModel
@@ -9,8 +10,10 @@ from src.agent import run_agent
 from src.context import extract_text
 from src.fuzzy import match_workflow
 from src.llm_client import LLMClient
+from src.model_registry import apply_model_overrides, ensure_model_available, known_model_aliases
 from src.orchestrator import Dispatch, run_assistant, run_direct
 from src.providers.openai_local import OpenAILocalClient
+from src.ui import AssistantUI, CommandHelp
 from src.workflow import WORKFLOW_REGISTRY, run_workflow
 
 
@@ -25,44 +28,96 @@ def run(
     return run_assistant(user_input, llm, conversation_context=conversation_context)
 
 
-def _print_result(result: BaseModel, as_json: bool) -> None:
-    print(result.model_dump_json(indent=2) if as_json else extract_text(result))
+def _print_result(result: BaseModel, as_json: bool, ui: AssistantUI | None = None) -> str:
+    if as_json:
+        print(result.model_dump_json(indent=2))
+        return extract_text(result)
+    if ui is not None:
+        return ui.assistant_message(result)
+    answer = extract_text(result)
+    print(answer)
+    return answer
 
 
-def _conversation_context(turns: list[tuple[str, str]], max_turns: int = 4) -> str:
+_EXPLICIT_CONTEXT_RE = re.compile(
+    r"\b(previous|earlier|above|last answer|you said|you mentioned|as you said|that you|"
+    r"continue|tell me more|explain more|same topic)\b",
+    re.IGNORECASE,
+)
+_PRONOUN_FOLLOW_UP_RE = re.compile(r"\b(it|its|they|them|that|this)\b", re.IGNORECASE)
+
+
+def _should_use_conversation_context(user_input: str, turns: list[tuple[str, str]]) -> bool:
+    if not turns:
+        return False
+    if _EXPLICIT_CONTEXT_RE.search(user_input):
+        return True
+    # Short elliptical follow-ups like "what about its history?" benefit from
+    # context. Longer standalone questions containing words like "that movie"
+    # should not inherit unrelated prior turns.
+    return len(user_input.split()) <= 8 and _PRONOUN_FOLLOW_UP_RE.search(user_input) is not None
+
+
+def _conversation_context(
+    user_input: str,
+    turns: list[tuple[str, str]],
+    max_turns: int = 4,
+) -> str | None:
+    if not _should_use_conversation_context(user_input, turns):
+        return None
     return "\n".join(f"User: {u}\nAssistant: {a}" for u, a in turns[-max_turns:])
 
 
-def _repl(dispatch: Dispatch, llm: LLMClient, as_json: bool, use_conversation: bool) -> None:
-    print("SLM assistant session. Type /exit to quit, /workflows to inspect DAG workflows.")
-    turns: list[tuple[str, str]] = []
+def _repl(
+    dispatch: Dispatch,
+    llm: LLMClient,
+    as_json: bool,
+    use_conversation: bool,
+    ui: AssistantUI,
+    show_header: bool = True,
+    initial_turns: list[tuple[str, str]] | None = None,
+) -> None:
+    if show_header and not as_json:
+        ui.header("interactive")
+
+    turns: list[tuple[str, str]] = list(initial_turns or [])
     while True:
         try:
-            user_input = input("\nyou> ").strip()
+            user_input = input("\n") if as_json else ui.ask()
         except (EOFError, KeyboardInterrupt):
             break
+
+        user_input = user_input.strip()
         if not user_input or user_input in {"/exit", "exit", "quit"}:
             break
-        if user_input == "/workflows":
-            for name, entry in WORKFLOW_REGISTRY.items():
-                print(f"  {name}: {entry.description}")
+        if user_input == "/help":
+            ui.help(_help_commands())
             continue
-        context = _conversation_context(turns) if use_conversation else None
+        if user_input == "/workflows":
+            ui.workflows(WORKFLOW_REGISTRY)
+            continue
+
+        context = _conversation_context(user_input, turns) if use_conversation else None
+
+        def execute() -> BaseModel:
+            return (
+                run(user_input, llm, conversation_context=context)
+                if use_conversation
+                else dispatch(user_input, llm)
+            )
+
         result = (
-            run(user_input, llm, conversation_context=context)
-            if use_conversation
-            else dispatch(user_input, llm)
+            execute() if as_json else ui.run_with_status("planning DAG/tools/model path…", execute)
         )
-        answer = extract_text(result)
-        print("assistant> ", end="")
-        _print_result(result, as_json)
+        answer = _print_result(result, as_json, None if as_json else ui)
         if use_conversation:
             turns.append((user_input, answer))
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Unified local SLM assistant: one prompt engine for CLI and chat"
+        description="Unified local SLM assistant: one prompt engine for CLI and chat",
+        add_help=False,
     )
     parser.add_argument(
         "-p",
@@ -72,47 +127,148 @@ def main() -> None:
     )
     parser.add_argument("--chat", action="store_true", help="Continue interactively after --prompt")
     parser.add_argument("--json", action="store_true", help="Print raw JSON result objects")
+    parser.add_argument(
+        "--model",
+        metavar="ALIAS",
+        help="Override all text specialist roles with a llama.cpp model alias",
+    )
+    parser.add_argument("--router-model", metavar="ALIAS", help="Override only the router model")
+    parser.add_argument("--qa-model", metavar="ALIAS", help="Override only the QA model")
+    parser.add_argument(
+        "--summarization-model", metavar="ALIAS", help="Override only the summarization model"
+    )
+    parser.add_argument(
+        "--classification-model", metavar="ALIAS", help="Override only the classification model"
+    )
+    parser.add_argument(
+        "--function-model", metavar="ALIAS", help="Override only the tool-selection model"
+    )
+    parser.add_argument(
+        "--agent-model", metavar="ALIAS", help="Override only the planner-agent model"
+    )
+    parser.add_argument(
+        "--no-model-download",
+        action="store_true",
+        help="Do not auto-download known missing model artifacts from Hugging Face",
+    )
     parser.add_argument("--direct", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--agent", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--workflow", metavar="NAME", help=argparse.SUPPRESS)
     parser.add_argument(
         "--list-workflows", action="store_true", help="List available workflows and exit"
     )
+    return parser
+
+
+def _help_commands() -> list[CommandHelp]:
+    return [
+        CommandHelp("src.main", "Start interactive chat using the unified assistant engine."),
+        CommandHelp("-p, --prompt TEXT", "Run one prompt and exit."),
+        CommandHelp("--chat -p TEXT", "Run an initial prompt, then continue interactively."),
+        CommandHelp("--json -p TEXT", "Print the raw result object as JSON for scripts."),
+        CommandHelp("--model ALIAS", "Experiment with a different local llama.cpp model alias."),
+        CommandHelp(
+            "--qa-model/--router-model/... ALIAS",
+            "Override one specialist role while keeping the rest unchanged.",
+        ),
+        CommandHelp("--list-workflows", "Inspect predefined DAG workflows."),
+        CommandHelp("/workflows", "Show DAG workflows inside interactive chat."),
+        CommandHelp("/help", "Show this help inside interactive chat."),
+        CommandHelp("/exit", "Leave interactive chat."),
+    ]
+
+
+def _select_dispatch(args: argparse.Namespace) -> Dispatch:
+    if args.workflow:
+        resolved = match_workflow(args.workflow, WORKFLOW_REGISTRY)
+        selected = WORKFLOW_REGISTRY.get(resolved or "")
+        if selected is None:
+            raise ValueError(
+                f"Unknown workflow: {args.workflow!r}. Available: {', '.join(WORKFLOW_REGISTRY)}"
+            )
+        return lambda inp, client: run_workflow(selected, inp, client)
+    if args.agent:
+        return run_agent
+    if args.direct:
+        return run_direct
+    return run
+
+
+def _model_overrides_from_args(args: argparse.Namespace) -> dict[str, str | None]:
+    return {
+        "router": args.router_model,
+        "question_answering": args.qa_model,
+        "summarization": args.summarization_model,
+        "classification": args.classification_model,
+        "function_calling": args.function_model,
+        "agent": args.agent_model,
+    }
+
+
+def _ensure_requested_models(args: argparse.Namespace) -> None:
+    requested = [args.model, *_model_overrides_from_args(args).values()]
+    for model in {m for m in requested if m}:
+        ensure_model_available(model, auto_download=not args.no_model_download)
+
+
+def main() -> None:
+    ui = AssistantUI()
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        ui.help(_help_commands())
+        return
+
+    parser = _build_parser()
     args = parser.parse_args()
 
     if args.list_workflows:
-        for name, entry in WORKFLOW_REGISTRY.items():
-            print(f"  {name}: {entry.description}")
-        sys.exit(0)
+        ui.workflows(WORKFLOW_REGISTRY)
+        return
+
+    try:
+        _ensure_requested_models(args)
+        apply_model_overrides(
+            default_model=args.model,
+            role_models=_model_overrides_from_args(args),
+        )
+        dispatch = _select_dispatch(args)
+    except (FileNotFoundError, ValueError) as exc:
+        ui.error(str(exc))
+        ui.info(f"Known auto-download aliases: {', '.join(known_model_aliases())}")
+        sys.exit(1)
 
     llm = OpenAILocalClient()
-
-    if args.workflow:
-        resolved = match_workflow(args.workflow, WORKFLOW_REGISTRY)
-        if resolved != args.workflow and resolved is not None:
-            print(f"Resolved workflow {args.workflow!r} → {resolved!r}")
-        selected = WORKFLOW_REGISTRY.get(resolved or "")
-        if selected is None:
-            print(f"Unknown workflow: {args.workflow!r}", file=sys.stderr)
-            print(f"Available: {', '.join(WORKFLOW_REGISTRY)}", file=sys.stderr)
-            sys.exit(1)
-        dispatch: Dispatch = lambda inp, client: run_workflow(selected, inp, client)
-    elif args.agent:
-        dispatch = run_agent
-    elif args.direct:
-        dispatch = run_direct
-    else:
-        dispatch = run
-
     use_conversation = dispatch is run
+    rich_output = not args.json
 
     if args.prompt is not None:
-        result = dispatch(args.prompt, llm)
-        _print_result(result, args.json)
+        if rich_output:
+            ui.header("one-shot" if not args.chat else "chat bootstrap")
+            ui.user_message(args.prompt)
+
+        def execute() -> BaseModel:
+            return dispatch(args.prompt, llm)
+
+        result = (
+            execute()
+            if args.json
+            else ui.run_with_status("planning DAG/tools/model path…", execute)
+        )
+        answer = _print_result(result, args.json, ui if rich_output else None)
         if not args.chat:
             return
+        initial_turns = [(args.prompt, answer)] if use_conversation else None
+    else:
+        initial_turns = None
 
-    _repl(dispatch, llm, args.json, use_conversation=use_conversation)
+    _repl(
+        dispatch,
+        llm,
+        args.json,
+        use_conversation=use_conversation,
+        ui=ui,
+        show_header=args.prompt is None,
+        initial_turns=initial_turns,
+    )
 
 
 if __name__ == "__main__":

@@ -7,8 +7,13 @@ planner loop when needed. The goal is an agentic feel with controlled routing,
 branches, tool nodes, and small-model specialist nodes.
 
 ```sh
-# Download models
+# Download the default small model
 uv run python -m src.download_models
+
+# Download a known alias, or a custom GGUF from Hugging Face
+uv run python -m src.download_models --model qwen3.5-0.8b-text
+uv run python -m src.download_models --model smollm2-360m-instruct-q4km
+uv run python -m src.download_models --repo-id USER/REPO-GGUF --filename model-q4.gguf
 
 # Start the inference server (keep running in a separate terminal)
 uv run python -m llama_cpp.server --config_file server_config.json
@@ -20,6 +25,10 @@ uv run python -m src.main
 uv run python -m src.main -p "what is 3 plus 5"
 uv run python -m src.main --prompt "search for llama.cpp and tell me what it is"
 uv run python -m src.main -p "calculate 144 divided by 12 and tell me if it is even or odd"
+
+# Experiment with model aliases exposed by the local llama.cpp server
+uv run python -m src.main --model qwen3.5-0.8b-text -p "what is spaCy?"
+uv run python -m src.main --qa-model qwen3.5-0.8b-text -p "what is spaCy?"
 
 # Start with an initial prompt, then keep the session open
 uv run python -m src.main --chat -p "Tell me about OpenAI"
@@ -41,8 +50,15 @@ uv run python -m evals.runner --no-mlflow --save
 # Compare MLflow evaluation runs
 uv run python -m evals.compare
 
-# Live benchmark against the local LLM server
+# Live benchmark against the local LLM server; optionally log experiments to MLflow
 uv run python -m evals.live
+uv run python -m evals.live reference --model qwen3.5-0.8b-text --mlflow
+
+# Complex acceptance cases with explicit ground truth and MLflow artifacts
+uv run python -m evals.acceptance --case hitchhiker --mlflow
+uv run python -m evals.acceptance --case gba_pokemon_first --mlflow
+uv run python -m evals.acceptance --case solid --mlflow
+uv run python -m evals.acceptance --all --mlflow
 
 # Gherkin acceptance/integration scenarios against the local LLM server
 uv run behave features

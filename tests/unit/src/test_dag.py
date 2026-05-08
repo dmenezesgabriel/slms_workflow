@@ -20,8 +20,15 @@ def test_runs_nodes_in_dependency_order(monkeypatch: pytest.MonkeyPatch) -> None
         calls.append(f"second:{user_input}")
         return FinalAnswer(answer="final answer")
 
-    monkeypatch.setitem(HANDLER_REGISTRY, "first", first_handler)
-    monkeypatch.setitem(HANDLER_REGISTRY, "second", second_handler)
+    _intent_map = {"first": first_handler, "second": second_handler}
+    original_dispatch = HANDLER_REGISTRY.dispatch
+
+    def patched_dispatch(intent: str, user_input: str, llm: object) -> FinalAnswer:
+        if intent in _intent_map:
+            return _intent_map[intent](user_input, llm)
+        return original_dispatch(intent, user_input, llm)
+
+    monkeypatch.setattr(HANDLER_REGISTRY, "dispatch", patched_dispatch)
 
     graph = DagWorkflow(
         name="test_graph",
@@ -43,8 +50,20 @@ def test_runs_nodes_in_dependency_order(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_skips_branch_when_condition_does_not_match(monkeypatch: pytest.MonkeyPatch) -> None:
-    handler = MagicMock(return_value=FinalAnswer(answer="ran"))
-    monkeypatch.setitem(HANDLER_REGISTRY, "branch", handler)
+    branch_calls: list[str] = []
+
+    def branch_handler(user_input: str, llm: object) -> FinalAnswer:
+        branch_calls.append(user_input)
+        return FinalAnswer(answer="ran")
+
+    original_dispatch = HANDLER_REGISTRY.dispatch
+
+    def patched_dispatch(intent: str, user_input: str, llm: object) -> FinalAnswer:
+        if intent == "branch":
+            return branch_handler(user_input, llm)
+        return original_dispatch(intent, user_input, llm)
+
+    monkeypatch.setattr(HANDLER_REGISTRY, "dispatch", patched_dispatch)
 
     graph = DagWorkflow(
         name="branch_graph",
@@ -56,7 +75,7 @@ def test_skips_branch_when_condition_does_not_match(monkeypatch: pytest.MonkeyPa
     result = run_dag_workflow(graph, "no url here", MagicMock())
 
     assert result == FinalAnswer(answer="No DAG node was executed for this request.")
-    assert handler.call_count == 0
+    assert branch_calls == []
 
 
 def test_rejects_cycles() -> None:

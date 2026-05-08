@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import mimetypes
-import re
 from pathlib import Path
 from typing import Any
 
@@ -10,9 +9,8 @@ from pydantic import BaseModel
 
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
+from src.patterns import IMAGE_REF_RE as _IMAGE_REF_PATTERN
 from src.schemas import FinalAnswer, ImageDescription
-
-_IMAGE_REF_PATTERN = re.compile(r"@(?P<path>\S+\.(?:png|jpg|jpeg|webp|bmp|gif))", re.IGNORECASE)
 
 
 def _extract_image_path(text: str) -> Path | None:
@@ -41,26 +39,33 @@ def _build_user_content(user_input: str, image_path: Path) -> list[dict[str, Any
     ]
 
 
-def handle(user_input: str, llm: LLMClient) -> BaseModel:
-    image_path = _extract_image_path(user_input)
+class ImageUnderstandingHandler:
+    intent = "image_understanding"
 
-    if image_path is None:
-        return FinalAnswer(
-            answer="Image understanding detected but no image path found. Use @./image.png"
+    def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        image_path = _extract_image_path(user_input)
+
+        if image_path is None:
+            return FinalAnswer(
+                answer="Image understanding detected but no image path found. Use @./image.png"
+            )
+
+        if not image_path.exists():
+            return FinalAnswer(answer=f"Image file not found: {image_path}")
+
+        profile = MODEL_REGISTRY["image_understanding"]
+        return llm.structured(
+            LLMRequest(
+                model=profile.model,
+                system=profile.system
+                + " Return JSON with description, visible_objects, and visible_text.",
+                user=_build_user_content(user_input, image_path),
+                max_tokens=profile.max_tokens,
+                temperature=profile.temperature,
+            ),
+            ImageDescription,
         )
 
-    if not image_path.exists():
-        return FinalAnswer(answer=f"Image file not found: {image_path}")
 
-    profile = MODEL_REGISTRY["image_understanding"]
-    return llm.structured(
-        LLMRequest(
-            model=profile.model,
-            system=profile.system
-            + " Return JSON with description, visible_objects, and visible_text.",
-            user=_build_user_content(user_input, image_path),
-            max_tokens=profile.max_tokens,
-            temperature=profile.temperature,
-        ),
-        ImageDescription,
-    )
+_handler = ImageUnderstandingHandler()
+handle = _handler.handle

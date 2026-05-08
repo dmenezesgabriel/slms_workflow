@@ -6,18 +6,21 @@ structured report so you can see exactly which component decided what
 and whether the result was good.
 
 Usage:
-    uv run python -m evals.live            # all groups
-    uv run python -m evals.live routing    # one group only
+    uv run python -m evals.live                    # all groups
+    uv run python -m evals.live routing            # one group only
+    uv run python -m evals.live --model alias --mlflow
 """
 
 from __future__ import annotations
 
+import argparse
 import io
 import os
-import sys
 import time
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 
 # Force trace on for the entire run
@@ -260,6 +263,17 @@ WORKFLOW_CASES: list[Case] = [
     ),
 ]
 
+REFERENCE_CASES: list[Case] = [
+    Case(
+        "X01",
+        "what is that movie that says the meaning of life is 42?",
+        "en",
+        "web_search",
+        expect_in_answer=["Hitchhiker", "Galaxy"],
+        note="ambiguous clue → generic web search/title resolution, no hardcoded answer",
+    ),
+]
+
 AGENT_CASES: list[Case] = [
     Case(
         "A01",
@@ -299,6 +313,7 @@ ALL_GROUPS: dict[str, list[Case]] = {
     "routing": ROUTING_CASES,
     "ner_tool": NER_TOOL_CASES,
     "workflow": WORKFLOW_CASES,
+    "reference": REFERENCE_CASES,
     "agent": AGENT_CASES,
 }
 
@@ -591,13 +606,88 @@ def _pitfalls_summary(all_results: dict[str, list[Result]]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Live benchmark for the unified SLM harness")
+    parser.add_argument(
+        "group", nargs="?", choices=sorted(ALL_GROUPS), help="Optional group to run"
+    )
+    parser.add_argument("--model", help="Override all text specialist roles with a model alias")
+    parser.add_argument("--router-model", help="Override only the router model")
+    parser.add_argument("--qa-model", help="Override only the QA model")
+    parser.add_argument("--summarization-model", help="Override only the summarization model")
+    parser.add_argument("--classification-model", help="Override only the classification model")
+    parser.add_argument("--function-model", help="Override only the tool-selection model")
+    parser.add_argument("--agent-model", help="Override only the planner-agent model")
+    parser.add_argument("--no-model-download", action="store_true")
+    parser.add_argument(
+        "--mlflow", action="store_true", help="Log aggregate live metrics to MLflow"
+    )
+    return parser
+
+
+def _role_models(args: argparse.Namespace) -> dict[str, str | None]:
+    return {
+        "router": args.router_model,
+        "question_answering": args.qa_model,
+        "summarization": args.summarization_model,
+        "classification": args.classification_model,
+        "function_calling": args.function_model,
+        "agent": args.agent_model,
+    }
+
+
+def _configure_models(args: argparse.Namespace) -> None:
+    from src.model_registry import apply_model_overrides, ensure_model_available
+
+    for model in {m for m in [args.model, *_role_models(args).values()] if m}:
+        ensure_model_available(model, auto_download=not args.no_model_download)
+    apply_model_overrides(default_model=args.model, role_models=_role_models(args))
+
+
+def _log_live_to_mlflow(all_results: dict[str, list[Result]], args: argparse.Namespace) -> str:
+    import mlflow
+
+    mlflow.set_tracking_uri(str(Path(__file__).parent.parent / "mlruns"))
+    mlflow.set_experiment("slms_live_evaluation")
+    run_name = f"live_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    with mlflow.start_run(run_name=run_name) as run:
+        params = {"model.default": args.model or "registry"}
+        params.update({f"model.{k}": v for k, v in _role_models(args).items() if v})
+        params["group"] = args.group or "all"
+        mlflow.log_params(params)
+
+        total_cases = 0
+        total_pass = 0
+        for group_name, results in all_results.items():
+            passed, warned, failed, avg_ms = _group_stats(results)
+            total = len(results)
+            total_cases += total
+            total_pass += passed
+            prefix = f"live.{group_name}"
+            mlflow.log_metrics(
+                {
+                    f"{prefix}.pass_rate": passed / total if total else 0.0,
+                    f"{prefix}.warn_count": float(warned),
+                    f"{prefix}.fail_count": float(failed),
+                    f"{prefix}.avg_latency_ms": avg_ms,
+                }
+            )
+        mlflow.log_metric(
+            "live.overall.pass_rate", total_pass / total_cases if total_cases else 0.0
+        )
+        return run.info.run_id
+
+
 def main() -> None:
-    group_filter = sys.argv[1] if len(sys.argv) > 1 else None
+    args = _build_parser().parse_args()
+    group_filter = args.group
+    _configure_models(args)
 
     runners: dict[str, tuple[list[Case], Callable[[list[Case]], list[Result]]]] = {
         "routing": (ROUTING_CASES, run_routing),
         "ner_tool": (NER_TOOL_CASES, run_ner_tool),
         "workflow": (WORKFLOW_CASES, run_workflow_group),
+        "reference": (REFERENCE_CASES, run_routing),
         "agent": (AGENT_CASES, run_agent_group),
     }
 
@@ -635,6 +725,10 @@ def main() -> None:
             f"\n{BOLD}OVERALL: {total_p}/{total_all} passed "
             f"({total_p/total_all*100:.0f}%){RESET}\n"
         )
+
+    if args.mlflow:
+        run_id = _log_live_to_mlflow(all_results, args)
+        print(f"{BOLD}MLflow run:{RESET} {run_id}")
 
 
 if __name__ == "__main__":

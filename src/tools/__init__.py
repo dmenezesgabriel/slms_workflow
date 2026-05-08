@@ -1,23 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, cast
+from typing import ClassVar, Mapping, Sequence, cast
 
 from src import trace
 from src.schemas import ToolDecision, ToolName
-from src.tools import calculator, web_fetch, web_search, wikipedia
-
-
-@dataclass(frozen=True)
-class ToolSpec:
-    name: str
-    description: str
-    parameters: dict[str, str]
-    fn: Callable[[dict[str, Any]], str]
-
-    def prompt_line(self) -> str:
-        params = ", ".join(f"{k}: {v}" for k, v in self.parameters.items())
-        return f"- {self.name}: {self.description}. Parameters: {{{params}}}"
+from src.tools.base import Tool
+from src.tools.calculator import Calculator
+from src.tools.web_fetch import WebFetch
+from src.tools.web_search import WebSearch
+from src.tools.wikipedia import Wikipedia
 
 
 @dataclass(frozen=True)
@@ -28,104 +20,106 @@ class ToolResult:
     error: str | None = None
 
 
-TOOL_ACTION_ARGUMENTS: Mapping[ToolName, str] = {
-    "web_search": "query",
-    "web_fetch": "url",
-    "wikipedia": "query",
-    "calculator": "expression",
-}
-TOOL_ACTIONS = frozenset(TOOL_ACTION_ARGUMENTS)
+class ToolRegistry:
+    _ACTION_ARGUMENTS: ClassVar[Mapping[ToolName, str]] = {
+        "web_search": "query",
+        "web_fetch": "url",
+        "wikipedia": "query",
+        "calculator": "expression",
+    }
+
+    def __init__(self, tools: Sequence[Tool]) -> None:
+        self._tools: dict[str, Tool] = {t.name: t for t in tools}
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._tools
+
+    def get(self, name: str) -> Tool | None:
+        return self._tools.get(name)
+
+    def prompt(self) -> str:
+        return "\n".join(t.prompt_line() for t in self._tools.values())
+
+    def is_action(self, action: str) -> bool:
+        return action in self._ACTION_ARGUMENTS
+
+    def decision_for_action(self, action: str, action_input: str) -> ToolDecision | None:
+        argument_name = self._ACTION_ARGUMENTS.get(cast(ToolName, action))
+        if argument_name is None:
+            return None
+        return ToolDecision(
+            needs_tool=True,
+            tool_name=cast(ToolName, action),
+            arguments={argument_name: action_input},
+            reason="Agent tool action.",
+        )
+
+    def execute(self, decision: ToolDecision) -> ToolResult:
+        if not decision.needs_tool or decision.tool_name == "none":
+            return ToolResult(success=False, tool_name="none", result="No tool needed.")
+
+        tool = self._tools.get(decision.tool_name)
+        if tool is None:
+            return ToolResult(
+                success=False,
+                tool_name=decision.tool_name,
+                result="",
+                error=f"Unknown tool: {decision.tool_name}",
+            )
+
+        trace.tool_call(decision.tool_name, decision.arguments)
+        try:
+            result = tool.execute(decision.arguments)
+            from src.scoring import score_result
+
+            score = score_result(result)
+            trace.tool_result(decision.tool_name, score.is_usable, result[:120])
+            return ToolResult(
+                success=score.is_usable,
+                tool_name=decision.tool_name,
+                result=result,
+                error=None if score.is_usable else score.reason,
+            )
+        except Exception as exc:
+            trace.tool_result(decision.tool_name, False, str(exc))
+            return ToolResult(
+                success=False, tool_name=decision.tool_name, result="", error=str(exc)
+            )
+
+    def execute_action(self, action: str, action_input: str) -> ToolResult | None:
+        decision = decision_for_action(action, action_input)
+        if decision is None:
+            return None
+        return execute(decision)
 
 
-TOOL_REGISTRY: dict[str, ToolSpec] = {
-    "calculator": ToolSpec(
-        name="calculator",
-        description="Evaluates a Python arithmetic expression safely",
-        parameters={"expression": "Python arithmetic string, e.g. '3 + 4 * 2'"},
-        fn=calculator.run,
-    ),
-    "web_search": ToolSpec(
-        name="web_search",
-        description="Searches the web via DuckDuckGo and returns page snippets",
-        parameters={
-            "query": "search query string",
-            "max_results": "number of results to return (default 3, max 5)",
-        },
-        fn=web_search.run,
-    ),
-    "web_fetch": ToolSpec(
-        name="web_fetch",
-        description="Fetches and extracts readable text from a URL",
-        parameters={"url": "full https:// URL to retrieve"},
-        fn=web_fetch.run,
-    ),
-    "wikipedia": ToolSpec(
-        name="wikipedia",
-        description="Returns the introductory section of a Wikipedia article",
-        parameters={"query": "article title or subject to look up"},
-        fn=wikipedia.run,
-    ),
-}
+TOOL_REGISTRY = ToolRegistry([Calculator(), WebSearch(), WebFetch(), Wikipedia()])
 
+# Module-level public API — callers and tests use these names directly.
+# execute_action deliberately calls the module-level execute so monkeypatching
+# src.tools.execute in tests also affects execute_action.
 
-def tool_prompt() -> str:
-    """Build the tool list section for the function_calling system prompt."""
-    return "\n".join(spec.prompt_line() for spec in TOOL_REGISTRY.values())
-
-
-def is_tool_action(action: str) -> bool:
-    """Return True when an agent action maps directly to a registered tool."""
-    return action in TOOL_ACTION_ARGUMENTS
-
-
-def decision_for_action(action: str, action_input: str) -> ToolDecision | None:
-    """Translate an agent tool action into the stable ToolDecision interface."""
-    argument_name = TOOL_ACTION_ARGUMENTS.get(cast(ToolName, action))
-    if argument_name is None:
-        return None
-    return ToolDecision(
-        needs_tool=True,
-        tool_name=cast(ToolName, action),
-        arguments={argument_name: action_input},
-        reason="Agent tool action.",
-    )
+TOOL_ACTIONS = frozenset(ToolRegistry._ACTION_ARGUMENTS)
 
 
 def execute(decision: ToolDecision) -> ToolResult:
-    if not decision.needs_tool or decision.tool_name == "none":
-        return ToolResult(success=False, tool_name="none", result="No tool needed.")
-
-    name = decision.tool_name
-    spec = TOOL_REGISTRY.get(name)
-    if spec is None:
-        return ToolResult(
-            success=False,
-            tool_name=name,
-            result="",
-            error=f"Unknown tool: {name}",
-        )
-
-    trace.tool_call(name, decision.arguments)
-    try:
-        result = spec.fn(decision.arguments)
-        from src.scoring import score_result
-
-        score = score_result(result)
-        trace.tool_result(name, score.is_usable, result[:120])
-        return ToolResult(
-            success=score.is_usable,
-            tool_name=name,
-            result=result,
-            error=None if score.is_usable else score.reason,
-        )
-    except Exception as exc:
-        trace.tool_result(name, False, str(exc))
-        return ToolResult(success=False, tool_name=name, result="", error=str(exc))
+    return TOOL_REGISTRY.execute(decision)
 
 
 def execute_action(action: str, action_input: str) -> ToolResult | None:
-    """Execute a direct tool action, or return None for non-tool actions."""
     decision = decision_for_action(action, action_input)
     if decision is None:
         return None
     return execute(decision)
+
+
+def is_tool_action(action: str) -> bool:
+    return TOOL_REGISTRY.is_action(action)
+
+
+def tool_prompt() -> str:
+    return TOOL_REGISTRY.prompt()
+
+
+def decision_for_action(action: str, action_input: str) -> ToolDecision | None:
+    return TOOL_REGISTRY.decision_for_action(action, action_input)

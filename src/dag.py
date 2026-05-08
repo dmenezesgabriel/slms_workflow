@@ -6,10 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from src import retrieval, trace
+from src import trace
 from src.context import compress, extract_text
 from src.handlers import HANDLER_REGISTRY
 from src.llm_client import LLMClient
+from src.patterns import URL_RE as _URL_PATTERN  # noqa: F401
+from src.retrieval import needs_retrieval
 from src.schemas import FinalAnswer
 
 ConditionName = Literal[
@@ -73,8 +75,7 @@ def run_dag_workflow(graph: DagWorkflow, user_input: str, llm: LLMClient) -> Bas
             node_input = node_input[:_MAX_NODE_INPUT_CHARS]
 
         trace.dag_node(graph.name, node.id, node.intent, node_input)
-        handler = HANDLER_REGISTRY.get(node.intent, HANDLER_REGISTRY["general"])
-        result = handler(node_input, llm)
+        result = HANDLER_REGISTRY.dispatch(node.intent, node_input, llm)
         text = extract_text(result)
 
         results[node.id] = result
@@ -104,13 +105,13 @@ def _render_input(
 
 
 def _condition_matches(condition: ConditionName, user_input: str) -> bool:
-    has_url = retrieval._URL_PATTERN.search(user_input) is not None
+    has_url = _URL_PATTERN.search(user_input) is not None
     if condition == "always":
         return True
     if condition == "if_retrieval_needed":
-        return retrieval.needs_retrieval(user_input)
+        return needs_retrieval(user_input)
     if condition == "if_not_retrieval_needed":
-        return not retrieval.needs_retrieval(user_input)
+        return not needs_retrieval(user_input)
     if condition == "if_query_has_url":
         return has_url
     if condition == "if_query_has_no_url":

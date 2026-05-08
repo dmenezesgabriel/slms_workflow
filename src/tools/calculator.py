@@ -6,6 +6,8 @@ import operator
 import re
 from typing import Any, Callable
 
+from src.tools.base import ToolBase
+
 _OpFn = Callable[..., int | float]
 
 _BIN_OPS: dict[type[ast.operator], _OpFn] = {
@@ -33,7 +35,6 @@ _MATH_FNS: dict[str, Callable[[float], float]] = {
     "log10": math.log10,
 }
 
-# Strip "= <answer>" suffix that models sometimes append (e.g. "sqrt(144) = 12")
 _TRAILING_RESULT = re.compile(r"\s*=\s*[\d.]+\s*$")
 
 
@@ -61,10 +62,15 @@ def _eval_node(node: ast.AST) -> int | float:
     raise ValueError(f"Expression not allowed: {type(node).__name__}")
 
 
-def run(arguments: dict[str, Any]) -> str:
-    expression = arguments.get("expression")
-    if not isinstance(expression, str):
-        raise ValueError("arguments.expression must be a string")
-    expression = _TRAILING_RESULT.sub("", expression).strip()
-    result = _eval_node(ast.parse(expression, mode="eval"))
-    return str(int(result) if isinstance(result, float) and result.is_integer() else result)
+class Calculator(ToolBase):
+    name = "calculator"
+    description = "Evaluates a Python arithmetic expression safely"
+    parameters: dict[str, str] = {"expression": "Python arithmetic string, e.g. '3 + 4 * 2'"}
+
+    def execute(self, arguments: dict[str, Any]) -> str:
+        expression = arguments.get("expression")
+        if not isinstance(expression, str):
+            raise ValueError("arguments.expression must be a string")
+        expression = _TRAILING_RESULT.sub("", expression).strip()
+        result = _eval_node(ast.parse(expression, mode="eval"))
+        return str(int(result) if isinstance(result, float) and result.is_integer() else result)

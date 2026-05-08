@@ -15,18 +15,25 @@ _TRIGGER_PREFIX = re.compile(
 _MIN_CONTENT_WORDS = 10
 
 
-def handle(user_input: str, llm: LLMClient) -> BaseModel:
-    text = _TRIGGER_PREFIX.sub("", user_input).strip()
-    if len(text.split()) < _MIN_CONTENT_WORDS:
-        return FinalAnswer(answer="No text provided to summarize.")
-    profile = MODEL_REGISTRY["summarization"]
-    return llm.structured(
-        LLMRequest(
-            model=profile.model,
-            system=profile.system,
-            user=f"Summarize this text:\n\n{text}",
-            max_tokens=profile.max_tokens,
-            temperature=profile.temperature,
-        ),
-        SummaryResult,
-    )
+class SummarizationHandler:
+    intent = "summarization"
+
+    def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        text = _TRIGGER_PREFIX.sub("", user_input).strip()
+        if len(text.split()) < _MIN_CONTENT_WORDS:
+            return FinalAnswer(answer="No text provided to summarize.")
+        profile = MODEL_REGISTRY["summarization"]
+        return llm.structured(
+            LLMRequest(
+                model=profile.model,
+                system=profile.system,
+                user=f"Summarize this text:\n\n{text}",
+                max_tokens=profile.max_tokens,
+                temperature=profile.temperature,
+            ),
+            SummaryResult,
+        )
+
+
+_handler = SummarizationHandler()
+handle = _handler.handle

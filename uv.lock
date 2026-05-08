@@ -4240,6 +4240,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "rapidfuzz" },
+    { name = "rich" },
     { name = "scikit-learn" },
     { name = "spacy" },
 ]
@@ -4268,6 +4269,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "rapidfuzz", specifier = ">=3.14.5" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "scikit-learn", specifier = ">=1.6.0" },
     { name = "spacy", specifier = ">=3.8.14" },
 ]

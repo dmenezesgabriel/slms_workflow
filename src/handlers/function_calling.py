@@ -8,8 +8,7 @@ from src.model_registry import MODEL_REGISTRY
 from src.schemas import FinalAnswer, ToolDecision
 from src.tools import TOOL_REGISTRY, execute, tool_prompt
 
-# Compatibility aliases for existing tests and callers. New code should import
-# public selectors from src.tool_selection.
+# Module-level aliases kept for test patching compatibility.
 _extract_math = tool_selection.extract_math
 _deterministic_tool = tool_selection.deterministic_tool
 _ner_tool = tool_selection.ner_tool
@@ -45,46 +44,49 @@ def deterministic_decision(user_input: str) -> ToolDecision | None:
     return _deterministic_tool(user_input) or _ner_tool(user_input)
 
 
-def handle(user_input: str, llm: LLMClient) -> BaseModel:
-    # Fast path 1: math expression
-    expression = _extract_math(user_input)
-    if expression is not None and "calculator" in TOOL_REGISTRY:
-        trace.fast_path("math_regex", expression)
-        return _dispatch(
-            ToolDecision(
-                needs_tool=True,
-                tool_name="calculator",
-                arguments={"expression": expression},
-                reason="Deterministic math extraction.",
+class FunctionCallingHandler:
+    intent = "function_calling"
+
+    def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        expression = _extract_math(user_input)
+        if expression is not None and "calculator" in TOOL_REGISTRY:
+            trace.fast_path("math_regex", expression)
+            return _dispatch(
+                ToolDecision(
+                    needs_tool=True,
+                    tool_name="calculator",
+                    arguments={"expression": expression},
+                    reason="Deterministic math extraction.",
+                )
             )
+
+        decision = _deterministic_tool(user_input)
+        if decision is not None:
+            trace.fast_path("regex_tool", decision.tool_name)
+            return _dispatch(decision)
+
+        decision = _ner_tool(user_input)
+        if decision is not None:
+            trace.fast_path("ner_entity", decision.tool_name)
+            return _dispatch(decision)
+
+        profile = MODEL_REGISTRY["function_calling"]
+        decision = llm.structured(
+            LLMRequest(
+                model=profile.model,
+                system=_build_system_prompt(),
+                user=user_input,
+                max_tokens=profile.max_tokens,
+                temperature=profile.temperature,
+            ),
+            ToolDecision,
         )
 
-    # Fast path 2: explicit tool patterns (search / wikipedia / fetch)
-    decision = _deterministic_tool(user_input)
-    if decision is not None:
-        trace.fast_path("regex_tool", decision.tool_name)
+        if not decision.needs_tool or decision.tool_name == "none":
+            return FinalAnswer(answer=decision.reason)
+
         return _dispatch(decision)
 
-    # Fast path 3: NER entity extraction — covers entity-centric queries
-    decision = _ner_tool(user_input)
-    if decision is not None:
-        trace.fast_path("ner_entity", decision.tool_name)
-        return _dispatch(decision)
 
-    # LLM path: model handles genuinely ambiguous or compound requests
-    profile = MODEL_REGISTRY["function_calling"]
-    decision = llm.structured(
-        LLMRequest(
-            model=profile.model,
-            system=_build_system_prompt(),
-            user=user_input,
-            max_tokens=profile.max_tokens,
-            temperature=profile.temperature,
-        ),
-        ToolDecision,
-    )
-
-    if not decision.needs_tool or decision.tool_name == "none":
-        return FinalAnswer(answer=decision.reason)
-
-    return _dispatch(decision)
+_handler = FunctionCallingHandler()
+handle = _handler.handle

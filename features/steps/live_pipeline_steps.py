@@ -9,6 +9,8 @@ from typing import Any, Callable
 
 from behave import given, then, when
 
+from evals.acceptance import CASE_BY_ID, _evaluate
+
 os.environ["SLM_TRACE"] = "1"
 
 
@@ -101,9 +103,37 @@ def step_trace_should_include(context: Any, expected_path: str) -> None:
     assert expected_path.lower() in joined_trace, joined_trace
 
 
+@when('I run acceptance case "{case_id}"')
+def step_run_acceptance_case(context: Any, case_id: str) -> None:
+    from src.context import extract_text
+    from src.main import run
+
+    case = CASE_BY_ID[case_id]
+    answer, trace_lines, elapsed_ms = _capture_run(
+        lambda: extract_text(run(case.prompt, context.llm_client))
+    )
+
+    context.last_answer = answer
+    context.last_trace_lines = trace_lines
+    context.last_elapsed_ms = elapsed_ms
+    context.last_acceptance_result = _evaluate(case, answer, trace_lines, elapsed_ms)
+
+
 @then('the answer should contain at least one of "{terms}"')
 def step_answer_should_contain_term(context: Any, terms: str) -> None:
     expected_terms = [term.strip().lower() for term in terms.split(",") if term.strip()]
     answer = context.last_answer.lower()
 
     assert any(term in answer for term in expected_terms), context.last_answer
+
+
+@then("the acceptance case should pass")
+def step_acceptance_case_should_pass(context: Any) -> None:
+    result = context.last_acceptance_result
+
+    assert result.passed, {
+        "failures": result.failures,
+        "answer": result.answer,
+        "trace": result.trace_lines,
+        "ground_truth": result.case.ground_truth,
+    }

@@ -18,7 +18,14 @@ def test_predefined_workflows_are_dag_workflows() -> None:
 
 def test_run_workflow_uses_dag_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     handler = MagicMock(return_value=FinalAnswer(answer="ok"))
-    monkeypatch.setitem(HANDLER_REGISTRY, "fake", handler)
+    original_dispatch = HANDLER_REGISTRY.dispatch
+
+    def patched_dispatch(intent: str, user_input: str, llm: object) -> FinalAnswer:
+        if intent == "fake":
+            return handler(user_input, llm)
+        return original_dispatch(intent, user_input, llm)
+
+    monkeypatch.setattr(HANDLER_REGISTRY, "dispatch", patched_dispatch)
 
     workflow = DagWorkflow(
         name="compat",

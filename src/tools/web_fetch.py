@@ -9,6 +9,9 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from src.config import HTTP_TIMEOUT, HTTP_USER_AGENT
+from src.tools.base import ToolBase
+
 _WHITESPACE = re.compile(r"\s+")
 _MAX_CHARS = 4000
 _PRIVATE_URL_ERROR = "Internal network URLs are not allowed."
@@ -17,11 +20,7 @@ IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 def validate_public_http_url(url: str) -> str | None:
-    """Return an error message when the URL is unsupported or internal.
-
-    The check parses the URL, validates scheme/host, resolves DNS, and rejects
-    private, loopback, link-local, multicast, unspecified, and reserved IPs.
-    """
+    """Return an error message when the URL is unsupported or internal."""
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
         return "Only http:// and https:// URLs are supported."
@@ -74,31 +73,36 @@ def _is_blocked_ip(address: IPAddress) -> bool:
     )
 
 
-def run(arguments: dict[str, Any]) -> str:
-    url = str(arguments.get("url", "")).strip()
-    if not url:
-        return "No URL provided."
+class WebFetch(ToolBase):
+    name = "web_fetch"
+    description = "Fetches and extracts readable text from a URL"
+    parameters: dict[str, str] = {"url": "full https:// URL to retrieve"}
 
-    validation_error = validate_public_http_url(url)
-    if validation_error is not None:
-        return validation_error
+    def execute(self, arguments: dict[str, Any]) -> str:
+        url = str(arguments.get("url", "")).strip()
+        if not url:
+            return "No URL provided."
 
-    try:
-        response = httpx.get(
-            url,
-            timeout=10,
-            follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; slm-workflow/1.0)"},
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        return f"HTTP error: {exc}"
-    except Exception as exc:
-        return f"Fetch failed: {exc}"
+        validation_error = validate_public_http_url(url)
+        if validation_error is not None:
+            return validation_error
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
-        tag.decompose()
+        try:
+            response = httpx.get(
+                url,
+                timeout=HTTP_TIMEOUT,
+                follow_redirects=True,
+                headers={"User-Agent": HTTP_USER_AGENT},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            return f"HTTP error: {exc}"
+        except Exception as exc:
+            return f"Fetch failed: {exc}"
 
-    text = _WHITESPACE.sub(" ", soup.get_text(separator=" ")).strip()
-    return text[:_MAX_CHARS]
+        soup = BeautifulSoup(response.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
+            tag.decompose()
+
+        text = _WHITESPACE.sub(" ", soup.get_text(separator=" ")).strip()
+        return text[:_MAX_CHARS]
