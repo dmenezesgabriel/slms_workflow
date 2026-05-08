@@ -15,9 +15,8 @@ from src.router import route_task
 from src.schemas import IntentName, ToolDecision
 from src.tool_selection import deterministic_tool, extract_math, ner_tool
 from src.tools import TOOL_REGISTRY
-from src.workflow import Step, Workflow, run_workflow
 
-Strategy = Literal["direct", "dag", "workflow", "agent"]
+Strategy = Literal["direct", "dag", "agent"]
 
 
 @dataclass(frozen=True)
@@ -28,7 +27,6 @@ class AssistantPlan:
     name: str
     reason: str
     intent: IntentName | None = None
-    workflow: Workflow | None = None
     graph: DagWorkflow | None = None
 
 
@@ -89,8 +87,6 @@ def run_assistant(user_input: str, llm: LLMClient) -> BaseModel:
 
     if plan.strategy == "dag" and plan.graph is not None:
         return run_dag_workflow(plan.graph, user_input, llm)
-    if plan.strategy == "workflow" and plan.workflow is not None:
-        return run_workflow(plan.workflow, user_input, llm)
     if plan.strategy == "agent":
         return run_agent(user_input, llm)
     return run_direct_with_intent(user_input, llm, plan.intent)
@@ -162,37 +158,10 @@ def compose_dag_workflow(user_input: str) -> DagWorkflow | None:
     )
 
 
-def compose_workflow(user_input: str) -> Workflow | None:
-    """Build a deterministic on-demand workflow from a single user prompt.
+def compose_workflow(user_input: str) -> DagWorkflow | None:
+    """Deprecated compatibility alias for DAG composition."""
 
-    Returns None when the prompt is best handled by the direct route. This is the
-    main unification point: users do not pick between prompt/agent/workflow; the
-    assistant composes a workflow only when the prompt asks for one implicitly.
-    """
-
-    decision = _deterministic_decision_for_planning(user_input)
-    if decision is None or not decision.needs_tool or decision.tool_name == "none":
-        return None
-
-    if decision.reason.startswith("NER") and not _ENTITY_LOOKUP_RE.search(user_input):
-        return None
-
-    processing_intent = _processing_intent(user_input, decision)
-    if processing_intent is None:
-        return None
-
-    tool_input = _tool_step_input(decision)
-    if tool_input is None:
-        return None
-
-    return Workflow(
-        name=f"on_demand_{decision.tool_name}_to_{processing_intent}",
-        description="Composed from the user's prompt by the unified assistant.",
-        steps=(
-            Step("function_calling", _literal_format(tool_input)),
-            Step(processing_intent, _processing_format(processing_intent)),
-        ),
-    )
+    return compose_dag_workflow(user_input)
 
 
 def _deterministic_decision_for_planning(user_input: str) -> ToolDecision | None:
@@ -231,10 +200,6 @@ def _processing_intent(user_input: str, decision: ToolDecision) -> str | None:
     return None
 
 
-def _processing_format(intent: str) -> str:
-    return _processing_format_with_input(intent, "input")
-
-
 def _processing_format_for_dag(intent: str, dependency_id: str) -> str:
     return _processing_format_with_input(intent, dependency_id)
 
@@ -244,7 +209,10 @@ def _processing_format_with_input(intent: str, input_key: str) -> str:
     if intent == "summarization":
         return f"summarize: {value}"
     if intent == "classification":
-        return f"Classify this content according to the user's request ({{query}}):\n{value}"
+        return (
+            f"Classify this content according to the user's request ({{query}}). "
+            f"Return a concise label and mention the topic in the reason:\n{value}"
+        )
     return f"Context:\n{value}\n\nQuestion: {{query}}"
 
 
@@ -272,7 +240,7 @@ def _clean_follow_up(value: object) -> str:
 
 
 def _literal_format(text: str) -> str:
-    """Make arbitrary tool text safe for str.format used by Workflow."""
+    """Make arbitrary tool text safe for str.format used by DAG nodes."""
 
     return text.replace("{", "{{").replace("}", "}}")
 

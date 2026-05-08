@@ -1,87 +1,72 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from pydantic import BaseModel
 
-from src import trace
-from src.context import compress, extract_text
-from src.handlers import HANDLER_REGISTRY
+from src.dag import DagNode, DagWorkflow, run_dag_workflow
 from src.llm_client import LLMClient
-from src.schemas import FinalAnswer
+
+# Backwards-compatible names for callers that still import Workflow. Internally,
+# predefined workflows are DAGs now; a linear workflow is just a DAG where each
+# node depends on the previous one.
+Workflow = DagWorkflow
 
 
-@dataclass(frozen=True)
-class Step:
-    intent: str
-    # {input} is substituted with the current pipeline value before calling the handler.
-    # Useful for the first step when the user query needs to be framed as a tool command.
-    input_format: str = "{input}"
+def run_workflow(workflow: DagWorkflow, user_input: str, llm: LLMClient) -> BaseModel:
+    """Run a named workflow.
+
+    This compatibility wrapper keeps the public CLI/eval/features API stable
+    while using the DAG executor as the single workflow runtime.
+    """
+
+    return run_dag_workflow(workflow, user_input, llm)
 
 
-@dataclass(frozen=True)
-class Workflow:
-    name: str
-    description: str
-    steps: tuple[Step, ...]
-
-
-_MAX_STEP_INPUT_CHARS = 600
-
-
-def run_workflow(workflow: Workflow, user_input: str, llm: LLMClient) -> BaseModel:
-    current = user_input
-    result: BaseModel = FinalAnswer(answer="")
-
-    for i, step in enumerate(workflow.steps):
-        # {input} = current pipeline value; {query} = original user request (always available)
-        step_input = step.input_format.format(input=current, query=user_input)
-        # Keep the model's context window safe for processing steps.
-        if i > 0 and len(step_input) > _MAX_STEP_INPUT_CHARS:
-            step_input = step_input[:_MAX_STEP_INPUT_CHARS]
-        trace.workflow_step(workflow.name, i + 1, step.intent, step_input)
-
-        handler = HANDLER_REGISTRY.get(step.intent, HANDLER_REGISTRY["general"])
-        result = handler(step_input, llm)
-
-        if i < len(workflow.steps) - 1:
-            raw = extract_text(result)
-            current = compress(raw, query=user_input, max_sentences=5)
-
-    return result
-
-
-WORKFLOW_REGISTRY: dict[str, Workflow] = {
-    "research_and_summarize": Workflow(
+WORKFLOW_REGISTRY: dict[str, DagWorkflow] = {
+    "research_and_summarize": DagWorkflow(
         name="research_and_summarize",
         description="Search the web for a topic and summarize the findings",
-        steps=(
-            Step("function_calling", "search for {input}"),
-            Step("summarization", "summarize: {input}"),
+        nodes=(
+            DagNode("search", "function_calling", "search for {query}"),
+            DagNode("summarize", "summarization", "summarize: {search}", depends_on=("search",)),
         ),
+        final_node="summarize",
     ),
-    "fetch_and_summarize": Workflow(
+    "fetch_and_summarize": DagWorkflow(
         name="fetch_and_summarize",
         description="Fetch a URL and summarize its content",
-        steps=(
-            Step("function_calling", "fetch {input}"),
-            Step("summarization", "summarize: {input}"),
+        nodes=(
+            DagNode("fetch", "function_calling", "fetch {query}"),
+            DagNode("summarize", "summarization", "summarize: {fetch}", depends_on=("fetch",)),
         ),
+        final_node="summarize",
     ),
-    "research_and_classify": Workflow(
+    "research_and_classify": DagWorkflow(
         name="research_and_classify",
         description="Search for information and classify the category or sentiment",
-        steps=(
-            Step("function_calling", "search for {input}"),
-            Step("classification", "Classify the category or sentiment of this content: {input}"),
+        nodes=(
+            DagNode("search", "function_calling", "search for {query}"),
+            DagNode(
+                "classify",
+                "classification",
+                "Classify this retrieved content for the user topic/request ({query}). "
+                "Return a concise label and mention the topic in the reason:\n{search}",
+                depends_on=("search",),
+            ),
         ),
+        final_node="classify",
     ),
-    "wiki_and_answer": Workflow(
+    "wiki_and_answer": DagWorkflow(
         name="wiki_and_answer",
         description="Look up a topic on Wikipedia then answer a question about it",
-        steps=(
-            Step("function_calling", "look up the Wikipedia article about {input}"),
-            Step("question_answering", "Context:\n{input}\n\nQuestion: {query}"),
+        nodes=(
+            DagNode("wiki", "function_calling", "look up the Wikipedia article about {query}"),
+            DagNode(
+                "answer",
+                "question_answering",
+                "Context:\n{wiki}\n\nQuestion: {query}",
+                depends_on=("wiki",),
+            ),
         ),
+        final_node="answer",
     ),
 }

@@ -300,5 +300,157 @@
       "qa.proper_noun_trigger_rate": 0.7778
     },
     "mlflow_run_id": "ad5087c268cc408993537bff480472cb"
+  },
+  {
+    "timestamp": "2026-05-08T01:05:16.506045+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.41,
+      "router.tfidf.latency_p95_ms": 0.49
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "orchestration": {
+      "orchestration.strategy_accuracy": 1.0,
+      "orchestration.plan_accuracy": 1.0,
+      "orchestration.dag_validity": 1.0,
+      "orchestration.latency_p50_ms": 0.02,
+      "orchestration.latency_p95_ms": 0.5
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    },
+    "mlflow_run_id": "465047c06bca4c6fa7304d3763aa8ef5"
+  },
+  {
+    "timestamp": "2026-05-08T01:06:03.976045+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.47,
+      "router.tfidf.latency_p95_ms": 0.69
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "orchestration": {
+      "orchestration.strategy_accuracy": 1.0,
+      "orchestration.plan_accuracy": 1.0,
+      "orchestration.dag_validity": 1.0,
+      "orchestration.latency_p50_ms": 0.03,
+      "orchestration.latency_p95_ms": 0.56
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    },
+    "mlflow_run_id": "68e4a0d1849541b78ffff882e9de56a9"
+  },
+  {
+    "timestamp": "2026-05-08T01:09:59.110150+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.47,
+      "router.tfidf.latency_p95_ms": 0.63
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "orchestration": {
+      "orchestration.strategy_accuracy": 1.0,
+      "orchestration.plan_accuracy": 1.0,
+      "orchestration.dag_validity": 1.0,
+      "orchestration.latency_p50_ms": 0.03,
+      "orchestration.latency_p95_ms": 0.54
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    },
+    "mlflow_run_id": "74247e38a9734cf2adc65297467b4af6"
+  },
+  {
+    "timestamp": "2026-05-08T01:25:12.638793+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.42,
+      "router.tfidf.latency_p95_ms": 0.47
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "orchestration": {
+      "orchestration.strategy_accuracy": 1.0,
+      "orchestration.plan_accuracy": 1.0,
+      "orchestration.dag_validity": 1.0,
+      "orchestration.latency_p50_ms": 0.03,
+      "orchestration.latency_p95_ms": 0.52
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    },
+    "mlflow_run_id": "dc616fccf93c44aeb2a1b6b1b9c46dc8"
   }
 ]

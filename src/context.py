@@ -47,9 +47,20 @@ def compress(text: str, query: str, max_sentences: int = 6) -> str:
 
 
 def extract_text(result: BaseModel) -> str:
-    """Pull the primary text field from any result schema."""
+    """Pull useful user-facing text from any result schema.
+
+    Classification results need more than the raw label; returning the reason
+    too keeps workflow outputs interpretable and preserves topic/evidence terms
+    for downstream nodes and acceptance checks.
+    """
     data: dict[str, Any] = result.model_dump()
-    for key in ("answer", "summary", "label", "description"):
+
+    label = data.get("label")
+    reason = data.get("reason")
+    if isinstance(label, str):
+        return f"{label}: {reason}" if isinstance(reason, str) and reason else label
+
+    for key in ("answer", "summary", "description"):
         value = data.get(key)
         if isinstance(value, str):
             return value

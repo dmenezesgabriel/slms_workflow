@@ -6,21 +6,21 @@ from src.orchestrator import compose_dag_workflow, compose_workflow, plan_assist
 
 
 def test_composes_math_follow_up_workflow() -> None:
-    workflow = compose_workflow("calculate 7 times 8 and tell me if the result is even or odd")
+    graph = compose_workflow("calculate 7 times 8 and tell me if the result is even or odd")
 
-    assert workflow is not None
-    assert workflow.name == "on_demand_calculator_to_question_answering"
-    assert [step.intent for step in workflow.steps] == ["function_calling", "question_answering"]
-    assert workflow.steps[0].input_format == "calculate 7 * 8"
+    assert graph is not None
+    assert graph.name == "on_demand_calculator_to_question_answering"
+    assert [node.intent for node in graph.nodes] == ["function_calling", "question_answering"]
+    assert graph.nodes[0].input_format == "calculate 7 * 8"
 
 
 def test_composes_research_summary_workflow_and_cleans_follow_up() -> None:
-    workflow = compose_workflow("search for llama.cpp and summarize the findings")
+    graph = compose_workflow("search for llama.cpp and summarize the findings")
 
-    assert workflow is not None
-    assert workflow.name == "on_demand_web_search_to_summarization"
-    assert workflow.steps[0].input_format == "search for llama.cpp"
-    assert workflow.steps[1].intent == "summarization"
+    assert graph is not None
+    assert graph.name == "on_demand_web_search_to_summarization"
+    assert graph.nodes[0].input_format == "search for llama.cpp"
+    assert graph.nodes[1].intent == "summarization"
 
 
 def test_composes_on_demand_dag_for_default_planner() -> None:
