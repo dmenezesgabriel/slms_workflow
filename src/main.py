@@ -2,42 +2,57 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Callable
 
 from pydantic import BaseModel
 
 from src.agent import run_agent
+from src.context import extract_text
 from src.fuzzy import match_workflow
-from src.handlers import HANDLER_REGISTRY
 from src.llm_client import LLMClient
+from src.orchestrator import Dispatch, run_assistant, run_direct
 from src.providers.openai_local import OpenAILocalClient
-from src.router import route_task
 from src.workflow import WORKFLOW_REGISTRY, run_workflow
 
 
 def run(user_input: str, llm: LLMClient | None = None) -> BaseModel:
+    """Unified public entrypoint used by CLI, tests, and integrations."""
+
     llm = llm or OpenAILocalClient()
-    intent = route_task(user_input, llm)
-    handler = HANDLER_REGISTRY.get(intent.intent, HANDLER_REGISTRY["general"])
-    return handler(user_input, llm)
+    return run_assistant(user_input, llm)
 
 
-def _repl(dispatch: Callable[[str, LLMClient], BaseModel], llm: LLMClient) -> None:
+def _print_result(result: BaseModel, as_json: bool) -> None:
+    print(result.model_dump_json(indent=2) if as_json else extract_text(result))
+
+
+def _repl(dispatch: Dispatch, llm: LLMClient, as_json: bool) -> None:
+    print("SLM agent session. Type /exit to quit, /workflows to list workflows.")
     while True:
         try:
-            user_input = input("\n> ").strip()
+            user_input = input("\nyou> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
-        if not user_input or user_input in {"exit", "quit"}:
+        if not user_input or user_input in {"/exit", "exit", "quit"}:
             break
-        print(dispatch(user_input, llm).model_dump_json(indent=2))
+        if user_input == "/workflows":
+            for name, entry in WORKFLOW_REGISTRY.items():
+                print(f"  {name}: {entry.description}")
+            continue
+        print("assistant> ", end="")
+        _print_result(dispatch(user_input, llm), as_json)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SLM workflow")
+    parser = argparse.ArgumentParser(
+        description="Unified local SLM agent with deterministic on-demand workflows"
+    )
     parser.add_argument("prompt", nargs="?", help="Run a single prompt and exit")
-    parser.add_argument("--agent", action="store_true", help="Use multi-step agentic loop")
-    parser.add_argument("--workflow", metavar="NAME", help="Run a predefined workflow by name")
+    parser.add_argument("--json", action="store_true", help="Print raw JSON result objects")
+    parser.add_argument(
+        "--direct", action="store_true", help="Bypass orchestration and use router+handler"
+    )
+    parser.add_argument("--agent", action="store_true", help="Force the multi-step agentic loop")
+    parser.add_argument("--workflow", metavar="NAME", help="Force a predefined workflow by name")
     parser.add_argument(
         "--list-workflows", action="store_true", help="List available workflows and exit"
     )
@@ -59,19 +74,19 @@ def main() -> None:
             print(f"Unknown workflow: {args.workflow!r}", file=sys.stderr)
             print(f"Available: {', '.join(WORKFLOW_REGISTRY)}", file=sys.stderr)
             sys.exit(1)
-        dispatch: Callable[[str, LLMClient], BaseModel] = lambda inp, client: run_workflow(
-            selected, inp, client
-        )
+        dispatch: Dispatch = lambda inp, client: run_workflow(selected, inp, client)
     elif args.agent:
         dispatch = run_agent
+    elif args.direct:
+        dispatch = run_direct
     else:
         dispatch = run
 
     if args.prompt:
-        print(dispatch(args.prompt, llm).model_dump_json(indent=2))
+        _print_result(dispatch(args.prompt, llm), args.json)
         return
 
-    _repl(dispatch, llm)
+    _repl(dispatch, llm, args.json)
 
 
 if __name__ == "__main__":

@@ -12,3 +12,5 @@ wheels/
 models/*
 !models/.gitkeep
 .flake8
+.coverage
+mlruns

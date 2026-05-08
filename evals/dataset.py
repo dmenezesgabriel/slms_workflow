@@ -181,6 +181,44 @@ QA_PROPER_NOUN_CASES: list[tuple[str, str | None]] = [
 ]
 
 # ---------------------------------------------------------------------------
+# Unified orchestration / DAG planning ground truth
+# (prompt, expected_strategy, expected_plan_name)
+# These are offline checks for the agentic deterministic planner. Keep direct
+# cases obvious enough that the TF-IDF router handles them without an LLM.
+# ---------------------------------------------------------------------------
+
+ORCHESTRATION_CASES: list[tuple[str, str, str]] = [
+    ("hello there", "direct", "general"),
+    ("what is the capital of France", "direct", "question_answering"),
+    ("calculate 15 + 7", "direct", "function_calling"),
+    (
+        "search for llama.cpp and summarize the findings",
+        "dag",
+        "on_demand_web_search_to_summarization",
+    ),
+    (
+        "search for Python tutorials and classify the results",
+        "dag",
+        "on_demand_web_search_to_classification",
+    ),
+    (
+        "calculate 7 times 8 and tell me if the result is even or odd",
+        "dag",
+        "on_demand_calculator_to_question_answering",
+    ),
+    (
+        "fetch https://example.com and summarize it",
+        "dag",
+        "on_demand_web_fetch_to_summarization",
+    ),
+    (
+        "look up the Wikipedia article about Brazil and tell me what it is",
+        "dag",
+        "on_demand_wikipedia_to_question_answering",
+    ),
+]
+
+# ---------------------------------------------------------------------------
 # Smoke prompts: run end-to-end against the live LLM.
 # These are NOT evaluated automatically — they require human review.
 # ---------------------------------------------------------------------------

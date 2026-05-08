@@ -201,5 +201,104 @@
       "found": 10,
       "total_expected": 10
     }
+  },
+  {
+    "timestamp": "2026-05-08T00:55:55.391873+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.46,
+      "router.tfidf.latency_p95_ms": 0.77
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    }
+  },
+  {
+    "timestamp": "2026-05-08T00:56:25.918734+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.45,
+      "router.tfidf.latency_p95_ms": 0.56
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    },
+    "mlflow_run_id": "7b7a5f7bb5024a3686d071c8455a647a"
+  },
+  {
+    "timestamp": "2026-05-08T00:58:19.275168+00:00",
+    "routing": {
+      "router.tfidf.accuracy": 1.0,
+      "router.tfidf.en_accuracy": 1.0,
+      "router.tfidf.pt_accuracy": 1.0,
+      "router.tfidf.below_threshold_rate": 0.0,
+      "router.tfidf.confidence_mean": 0.8823,
+      "router.tfidf.confidence_p10": 0.6531,
+      "router.tfidf.latency_p50_ms": 0.44,
+      "router.tfidf.latency_p95_ms": 0.55
+    },
+    "tool": {
+      "tools.deterministic.tool_accuracy": 1.0,
+      "tools.deterministic.arg_accuracy": 1.0,
+      "tools.deterministic.coverage": 1.0
+    },
+    "orchestration": {
+      "orchestration.strategy_accuracy": 1.0,
+      "orchestration.plan_accuracy": 1.0,
+      "orchestration.dag_validity": 1.0,
+      "orchestration.latency_p50_ms": 0.03,
+      "orchestration.latency_p95_ms": 0.57
+    },
+    "ner": {
+      "ner.entity_recall": 1.0,
+      "ner.temporal_accuracy": 1.0
+    },
+    "summarization": {
+      "summarization.guard_hit_rate": 1.0,
+      "summarization.guard_false_positive_rate": 0.0
+    },
+    "qa": {
+      "qa.proper_noun_accuracy": 1.0,
+      "qa.proper_noun_trigger_rate": 0.7778
+    },
+    "mlflow_run_id": "ad5087c268cc408993537bff480472cb"
   }
 ]

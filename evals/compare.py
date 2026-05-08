@@ -32,6 +32,13 @@ _TECHNIQUES = {
         "tools.deterministic.arg_accuracy",
         "tools.deterministic.coverage",
     ],
+    "Unified Orchestration / DAG": [
+        "orchestration.strategy_accuracy",
+        "orchestration.plan_accuracy",
+        "orchestration.dag_validity",
+        "orchestration.latency_p50_ms",
+        "orchestration.latency_p95_ms",
+    ],
     "NER (spaCy)": [
         "ner.entity_recall",
         "ner.temporal_accuracy",

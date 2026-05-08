@@ -40,6 +40,10 @@ def tool_result(tool_name: str, success: bool, result: str) -> None:
     _emit("tool.result", tool=tool_name, success=success, result=result[:120])
 
 
+def plan(strategy: str, name: str, reason: str) -> None:
+    _emit("plan", strategy=strategy, name=name, reason=reason[:80])
+
+
 def agent_step(step_n: int, thought: str, action: str, action_input: str) -> None:
     _emit("agent.step", n=step_n, action=action, thought=thought[:80], input=action_input[:80])
 
@@ -50,6 +54,14 @@ def agent_final(steps_taken: int) -> None:
 
 def workflow_step(workflow: str, step_n: int, intent: str, step_input: str) -> None:
     _emit("workflow.step", workflow=workflow, n=step_n, intent=intent, input=step_input[:80])
+
+
+def dag_node(graph: str, node_id: str, intent: str, node_input: str) -> None:
+    _emit("dag.node", graph=graph, node=node_id, intent=intent, input=node_input[:80])
+
+
+def dag_skip(graph: str, node_id: str, condition: str) -> None:
+    _emit("dag.skip", graph=graph, node=node_id, condition=condition)
 
 
 def ner(text: str, entities: list[tuple[str, str]]) -> None:

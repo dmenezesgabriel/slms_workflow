@@ -140,6 +140,52 @@ class ToolMetrics:
 
 
 # ---------------------------------------------------------------------------
+# Unified Orchestration / DAG Planning
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class OrchestrationMetrics:
+    """Metrics for the unified planner and on-demand DAG composition."""
+
+    total: int = 0
+    strategy_correct: int = 0
+    plan_correct: int = 0
+    dag_total: int = 0
+    dag_valid: int = 0
+    latencies_ms: list[float] = field(default_factory=list)
+
+    @property
+    def strategy_accuracy(self) -> float:
+        return self.strategy_correct / self.total if self.total else 0.0
+
+    @property
+    def plan_accuracy(self) -> float:
+        return self.plan_correct / self.total if self.total else 0.0
+
+    @property
+    def dag_validity(self) -> float:
+        return self.dag_valid / self.dag_total if self.dag_total else 0.0
+
+    @property
+    def p50_ms(self) -> float:
+        return _percentile(self.latencies_ms, 0.50)
+
+    @property
+    def p95_ms(self) -> float:
+        return _percentile(self.latencies_ms, 0.95)
+
+    def to_mlflow_dict(self) -> dict[str, float]:
+        return {
+            "orchestration.strategy_accuracy": round(self.strategy_accuracy, 4),
+            "orchestration.plan_accuracy": round(self.plan_accuracy, 4),
+            "orchestration.dag_validity": round(self.dag_validity, 4),
+            "orchestration.latency_p50_ms": round(self.p50_ms, 2),
+            "orchestration.latency_p95_ms": round(self.p95_ms, 2),
+        }
+
+
+# ---------------------------------------------------------------------------
 # NER Entity Extraction
 # ---------------------------------------------------------------------------
 

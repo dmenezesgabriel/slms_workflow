@@ -27,6 +27,7 @@ import mlflow
 
 from evals.dataset import (
     NER_CASES,
+    ORCHESTRATION_CASES,
     QA_PROPER_NOUN_CASES,
     ROUTING_CASES,
     SUMMARIZATION_GUARD_CASES,
@@ -35,6 +36,7 @@ from evals.dataset import (
 )
 from evals.metrics import (
     NERMetrics,
+    OrchestrationMetrics,
     QAProperNounMetrics,
     RoutingMetrics,
     SummarizationGuardMetrics,
@@ -145,6 +147,72 @@ def _eval_tools() -> ToolMetrics:
             print(f)
 
     return m
+
+
+# ---------------------------------------------------------------------------
+# Unified orchestration / DAG planning
+# ---------------------------------------------------------------------------
+
+
+def _eval_orchestration() -> OrchestrationMetrics:
+    from src.orchestrator import plan_assistant
+
+    class _NoLLM:
+        def structured(self, *a: object, **kw: object) -> object:
+            raise AssertionError("Offline orchestration eval must not call the LLM")
+
+    m = OrchestrationMetrics()
+    failures: list[str] = []
+
+    for prompt, expected_strategy, expected_name in ORCHESTRATION_CASES:
+
+        def _run(p: str = prompt) -> object:
+            return plan_assistant(p, _NoLLM())  # type: ignore[arg-type]
+
+        plan, elapsed = timed(_run)
+        m.total += 1
+        m.latencies_ms.append(elapsed)
+
+        strategy_ok = getattr(plan, "strategy") == expected_strategy
+        name_ok = getattr(plan, "name") == expected_name
+        if strategy_ok:
+            m.strategy_correct += 1
+        else:
+            failures.append(
+                f"  STRAT {prompt!r} → got {getattr(plan, 'strategy')!r}, "
+                f"expected {expected_strategy!r}"
+            )
+        if strategy_ok and name_ok:
+            m.plan_correct += 1
+        else:
+            failures.append(
+                f"  PLAN  {prompt!r} → got {getattr(plan, 'name')!r}, "
+                f"expected {expected_name!r}"
+            )
+
+        graph = getattr(plan, "graph", None)
+        if expected_strategy == "dag":
+            m.dag_total += 1
+            if graph is not None and _is_valid_graph(graph):
+                m.dag_valid += 1
+            else:
+                failures.append(f"  DAG   {prompt!r} → invalid graph: {graph!r}")
+
+    if failures:
+        print("\n[orchestration failures]")
+        for f in failures:
+            print(f)
+
+    return m
+
+
+def _is_valid_graph(graph: object) -> bool:
+    nodes = getattr(graph, "nodes", ())
+    node_ids = {getattr(node, "id", None) for node in nodes}
+    final_node = getattr(graph, "final_node", None)
+    if final_node not in node_ids:
+        return False
+    return all(dep in node_ids for node in nodes for dep in getattr(node, "depends_on", ()))
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +393,7 @@ def _row(label: str, value: str, width: int = 32) -> str:
 def _print_report(
     rm: RoutingMetrics,
     tm: ToolMetrics,
+    om: OrchestrationMetrics,
     nm: NERMetrics | None,
     sgm: SummarizationGuardMetrics,
     qam: QAProperNounMetrics,
@@ -345,6 +414,17 @@ def _print_report(
     print(_row("Tool name accuracy:", f"{pct(tm.tool_accuracy)}  ({tm.tool_correct}/{tm.total})"))
     print(_row("Arg quality:", f"{pct(tm.arg_accuracy)}  ({tm.arg_correct}/{tm.total})"))
     print(_row("LLM-free coverage:", pct(tm.coverage)))
+
+    print("\n── Technique: Unified Orchestration / DAG ───────────────")
+    print(
+        _row(
+            "Strategy accuracy:",
+            f"{pct(om.strategy_accuracy)}  ({om.strategy_correct}/{om.total})",
+        )
+    )
+    print(_row("Plan accuracy:", f"{pct(om.plan_accuracy)}  ({om.plan_correct}/{om.total})"))
+    print(_row("DAG validity:", f"{pct(om.dag_validity)}  ({om.dag_valid}/{om.dag_total})"))
+    print(_row("Planner latency p50 / p95:", f"{om.p50_ms:.1f} ms / {om.p95_ms:.1f} ms"))
 
     if nm is not None:
         print("\n── Technique: NER (spaCy xx_ent_wiki_sm) ────────────────")
@@ -392,6 +472,7 @@ def _git_sha() -> str:
 def _log_to_mlflow(
     rm: RoutingMetrics,
     tm: ToolMetrics,
+    om: OrchestrationMetrics,
     nm: NERMetrics | None,
     sgm: SummarizationGuardMetrics,
     qam: QAProperNounMetrics,
@@ -411,6 +492,7 @@ def _log_to_mlflow(
         # Dataset sizes as params
         from evals.dataset import (
             NER_CASES,
+            ORCHESTRATION_CASES,
             QA_PROPER_NOUN_CASES,
             ROUTING_CASES,
             SUMMARIZATION_GUARD_CASES,
@@ -422,6 +504,7 @@ def _log_to_mlflow(
             {
                 "dataset.routing_cases": len(ROUTING_CASES),
                 "dataset.tool_cases": len(TOOL_CASES),
+                "dataset.orchestration_cases": len(ORCHESTRATION_CASES),
                 "dataset.ner_cases": len(NER_CASES),
                 "dataset.temporal_cases": len(TEMPORAL_CASES),
                 "dataset.guard_cases": len(SUMMARIZATION_GUARD_CASES),
@@ -432,6 +515,7 @@ def _log_to_mlflow(
         # Per-technique metrics
         mlflow.log_metrics(rm.to_mlflow_dict())
         mlflow.log_metrics(tm.to_mlflow_dict())
+        mlflow.log_metrics(om.to_mlflow_dict())
         if nm is not None:
             mlflow.log_metrics(nm.to_mlflow_dict())
         mlflow.log_metrics(sgm.to_mlflow_dict())
@@ -448,6 +532,7 @@ def _log_to_mlflow(
 def _to_dict(
     rm: RoutingMetrics,
     tm: ToolMetrics,
+    om: OrchestrationMetrics,
     nm: NERMetrics | None,
     sgm: SummarizationGuardMetrics,
     qam: QAProperNounMetrics,
@@ -456,6 +541,7 @@ def _to_dict(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "routing": rm.to_mlflow_dict(),
         "tool": tm.to_mlflow_dict(),
+        "orchestration": om.to_mlflow_dict(),
         "ner": nm.to_mlflow_dict() if nm is not None else None,
         "summarization": sgm.to_mlflow_dict(),
         "qa": qam.to_mlflow_dict(),
@@ -477,6 +563,9 @@ def main() -> None:
     print("Running tool selection evaluation…")
     tm = _eval_tools()
 
+    print("Running orchestration / DAG planning evaluation…")
+    om = _eval_orchestration()
+
     print("Running NER evaluation…")
     nm = _eval_ner()
 
@@ -486,11 +575,11 @@ def main() -> None:
     print("Running QA proper-noun fallback evaluation…")
     qam = _eval_qa_proper_noun()
 
-    _print_report(rm, tm, nm, sgm, qam)
+    _print_report(rm, tm, om, nm, sgm, qam)
 
     run_id: str | None = None
     if use_mlflow:
-        run_id = _log_to_mlflow(rm, tm, nm, sgm, qam)
+        run_id = _log_to_mlflow(rm, tm, om, nm, sgm, qam)
         print(f"MLflow run logged: {run_id}")
         print(f"  Tracking URI : {_MLRUNS_DIR}")
         print(f"  Experiment   : {_MLFLOW_EXPERIMENT}")
@@ -503,7 +592,7 @@ def main() -> None:
         history: list[dict] = []  # type: ignore[type-arg]
         if out.exists():
             history = json.loads(out.read_text())
-        entry = _to_dict(rm, tm, nm, sgm, qam)
+        entry = _to_dict(rm, tm, om, nm, sgm, qam)
         if run_id:
             entry["mlflow_run_id"] = run_id
         history.append(entry)
