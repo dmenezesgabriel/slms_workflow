@@ -22,7 +22,7 @@ def _llm_server_available(host: str = "127.0.0.1", port: int = 8080) -> bool:
 
 
 @pytest.fixture(scope="session")
-def llm_client():
+def llm_client() -> object:
     """Return an OpenAILocalClient, skipping the session if the server is unreachable."""
     if not _llm_server_available():
         pytest.skip("LLM server not available at 127.0.0.1:8080 — start llama.cpp first")

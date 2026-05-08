@@ -7,7 +7,6 @@ import pytest
 from src.handlers import question_answering
 from src.schemas import FinalAnswer
 
-
 WHAT_IS_PROMPT = "What is spaCy?"
 PROPER_NOUN = "spaCy"
 PROPER_NOUN_GROUP = 1
@@ -61,9 +60,7 @@ class TestProperNounPattern:
             ("What is OpenAI?", "OpenAI"),
         ],
     )
-    def test_matches_entity_after_question_phrase(
-        self, prompt: str, expected_entity: str
-    ) -> None:
+    def test_matches_entity_after_question_phrase(self, prompt: str, expected_entity: str) -> None:
         question_match = question_answering._WHAT_IS_RE.search(prompt)
 
         assert question_match is not None

@@ -14,6 +14,8 @@ IntentName = Literal[
     "unclassified",
 ]
 
+ToolName = Literal["none", "calculator", "web_search", "web_fetch", "wikipedia"]
+
 
 class IntentClassification(BaseModel):
     intent: IntentName
@@ -39,9 +41,9 @@ class SummaryResult(BaseModel):
 
 class ToolDecision(BaseModel):
     needs_tool: bool
-    # Always a string so constrained JSON generation is forced to emit a value.
-    # Use "none" when no tool is needed.
-    tool_name: str = "none"
+    # Constrained to the stable tool interface while still forcing constrained
+    # JSON generation to emit a value. Use "none" when no tool is needed.
+    tool_name: ToolName = "none"
     arguments: dict[str, Any] = Field(default_factory=dict)
     reason: str
 

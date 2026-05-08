@@ -7,7 +7,6 @@ import pytest
 from src.handlers import function_calling
 from src.schemas import FinalAnswer, ToolDecision
 
-
 MATH_TEXT = "what is 3 plus 5"
 MATH_EXPRESSION = "3 + 5"
 SEARCH_TEXT = "search for Python tutorials"
@@ -199,7 +198,7 @@ class TestHandle:
         monkeypatch.setattr(function_calling, "_extract_math", extract_math)
         monkeypatch.setattr(function_calling, "_dispatch", dispatch)
         monkeypatch.setattr(function_calling, "ToolDecision", tool_decision_class)
-        monkeypatch.setattr(function_calling.trace, "fast_path", fast_path)
+        monkeypatch.setattr("src.handlers.function_calling.trace.fast_path", fast_path)
         monkeypatch.setattr(function_calling, "TOOL_REGISTRY", {"calculator": object()})
 
         result = function_calling.handle(MATH_TEXT, llm)
@@ -240,7 +239,7 @@ class TestHandle:
         assert result == FinalAnswer(answer=NO_TOOL_DECISION.reason)
         assert llm_request_class.call_count == 1
         assert llm.structured.call_count == 1
-        llm.structured.assert_called_once_with(llm_request, function_calling.ToolDecision)
+        llm.structured.assert_called_once_with(llm_request, ToolDecision)
         extract_math.assert_called_once_with(AMBIGUOUS_TEXT)
         deterministic_tool.assert_called_once_with(AMBIGUOUS_TEXT)
         ner_tool.assert_called_once_with(AMBIGUOUS_TEXT)

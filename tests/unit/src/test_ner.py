@@ -7,7 +7,6 @@ import pytest
 from src import ner
 from src.ner import Entity
 
-
 TEMPORAL_PROMPTS = [
     "What are the latest news about OpenAI?",
     "recent news on Python 3.13",
@@ -57,7 +56,7 @@ class TestExtract:
         extractor.extract.return_value = expected_entities
         trace_ner = MagicMock()
         monkeypatch.setattr(ner, "_extractor", extractor)
-        monkeypatch.setattr(ner.trace, "ner", trace_ner)
+        monkeypatch.setattr("src.ner.trace.ner", trace_ner)
 
         result = ner.extract(text)
 
@@ -65,14 +64,16 @@ class TestExtract:
         assert extractor.extract.call_count == 1
         extractor.extract.assert_called_once_with(text)
 
-    def test_records_trace_when_entities_are_extracted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_records_trace_when_entities_are_extracted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         text = "Tell me about OpenAI"
         entity = Entity(text="OpenAI", label="ORG")
         extractor = MagicMock()
         extractor.extract.return_value = [entity]
         trace_ner = MagicMock()
         monkeypatch.setattr(ner, "_extractor", extractor)
-        monkeypatch.setattr(ner.trace, "ner", trace_ner)
+        monkeypatch.setattr("src.ner.trace.ner", trace_ner)
 
         ner.extract(text)
 
@@ -87,7 +88,7 @@ class TestExtract:
         extractor.extract.return_value = []
         trace_ner = MagicMock()
         monkeypatch.setattr(ner, "_extractor", extractor)
-        monkeypatch.setattr(ner.trace, "ner", trace_ner)
+        monkeypatch.setattr("src.ner.trace.ner", trace_ner)
 
         result = ner.extract(text)
 
@@ -96,7 +97,9 @@ class TestExtract:
 
 
 class TestLookupEntities:
-    def test_returns_only_entities_with_lookup_labels(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_only_entities_with_lookup_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         text = "Tell me about OpenAI and Monday"
         lookup_entity = Entity(text="OpenAI", label="ORG")
         ignored_entity = Entity(text="Monday", label="DATE")

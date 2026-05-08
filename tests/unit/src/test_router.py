@@ -7,7 +7,6 @@ import pytest
 from src import router
 from src.schemas import IntentClassification
 
-
 FAST_ROUTE_CONFIDENCE = router._FAST_ROUTE_THRESHOLD
 BELOW_FAST_ROUTE_CONFIDENCE = router._FAST_ROUTE_THRESHOLD / 2
 ABOVE_LLM_FALLBACK_CONFIDENCE = (router._LLM_FALLBACK_THRESHOLD + 1.0) / 2
@@ -128,7 +127,7 @@ class TestRouteTaskFastPath:
         classify = MagicMock(return_value=("summarization", FAST_ROUTE_CONFIDENCE))
         trace_route = MagicMock()
         monkeypatch.setattr(router._ml_router, "classify", classify)
-        monkeypatch.setattr(router.trace, "route", trace_route)
+        monkeypatch.setattr("src.router.trace.route", trace_route)
 
         result = router.route_task(FAST_ROUTE_PROMPT, llm)
 
@@ -156,7 +155,7 @@ class TestRouteTaskLlmFallback:
         trace_route = MagicMock()
         llm_request_class = MagicMock(return_value=LLM_REQUEST)
         monkeypatch.setattr(router._ml_router, "classify", classify)
-        monkeypatch.setattr(router.trace, "route", trace_route)
+        monkeypatch.setattr("src.router.trace.route", trace_route)
         monkeypatch.setattr(router, "LLMRequest", llm_request_class)
 
         result = router.route_task(LLM_ROUTE_PROMPT, llm)
@@ -185,7 +184,7 @@ class TestRouteTaskLlmFallback:
         trace_route = MagicMock()
         llm_request_class = MagicMock(return_value=LLM_REQUEST)
         monkeypatch.setattr(router._ml_router, "classify", classify)
-        monkeypatch.setattr(router.trace, "route", trace_route)
+        monkeypatch.setattr("src.router.trace.route", trace_route)
         monkeypatch.setattr(router, "LLMRequest", llm_request_class)
 
         result = router.route_task(LLM_ROUTE_PROMPT, llm)

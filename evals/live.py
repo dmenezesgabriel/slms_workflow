@@ -366,7 +366,11 @@ def _terms_in_answer(terms: list[str], answer: str) -> tuple[int, int]:
 def run_routing(cases: list[Case]) -> list[Result]:
     results = []
     for c in cases:
-        answer, traces, elapsed = _capture_run(lambda p=c.prompt: _run_direct(p))
+
+        def run_case(prompt: str = c.prompt) -> str:
+            return _run_direct(prompt)
+
+        answer, traces, elapsed = _capture_run(run_case)
         sc = score_result(answer)
         path_ok = _path_in_trace(c.expect_path, traces)
         results.append(
@@ -399,7 +403,11 @@ def run_workflow_group(cases: list[Case]) -> list[Result]:
     results = []
     for c in cases:
         wf_name = wf_map.get(c.id, "research_and_summarize")
-        answer, traces, elapsed = _capture_run(lambda p=c.prompt, w=wf_name: _run_workflow(w, p))
+
+        def run_case(prompt: str = c.prompt, workflow_name: str = wf_name) -> str:
+            return _run_workflow(workflow_name, prompt)
+
+        answer, traces, elapsed = _capture_run(run_case)
         sc = score_result(answer)
         path_ok = _path_in_trace(c.expect_path, traces)
         results.append(
@@ -420,7 +428,11 @@ def run_workflow_group(cases: list[Case]) -> list[Result]:
 def run_agent_group(cases: list[Case]) -> list[Result]:
     results = []
     for c in cases:
-        answer, traces, elapsed = _capture_run(lambda p=c.prompt: _run_agent(p))
+
+        def run_case(prompt: str = c.prompt) -> str:
+            return _run_agent(prompt)
+
+        answer, traces, elapsed = _capture_run(run_case)
         sc = score_result(answer)
         path_ok = _path_in_trace(c.expect_path, traces)
         results.append(

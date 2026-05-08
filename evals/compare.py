@@ -96,7 +96,9 @@ def main() -> None:
 
     # Header
     run_labels = [r.data.tags.get("mlflow.runName", r.info.run_id[:8]) for r in runs]
-    header = f"  {'Metric':<{_METRIC_WIDTH}}" + "".join(f"{lbl:>{_COL_WIDTH}}" for lbl in run_labels)
+    header = f"  {'Metric':<{_METRIC_WIDTH}}" + "".join(
+        f"{lbl:>{_COL_WIDTH}}" for lbl in run_labels
+    )
     sep = "─" * len(header)
 
     print(f"\n{'═' * len(header)}")
@@ -107,7 +109,9 @@ def main() -> None:
         print(f"\n  ── {technique} {'─' * max(0, len(sep) - len(technique) - 6)}")
         for key in keys:
             values = [r.data.metrics.get(key) for r in runs]
-            row = f"  {key:<{_METRIC_WIDTH}}" + "".join(f"{_fmt(key, v):>{_COL_WIDTH}}" for v in values)
+            row = f"  {key:<{_METRIC_WIDTH}}" + "".join(
+                f"{_fmt(key, v):>{_COL_WIDTH}}" for v in values
+            )
 
             # Highlight if latest run differs from previous
             if len(values) >= 2 and values[0] is not None and values[1] is not None:

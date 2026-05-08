@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Mapping, cast
 
 from src import trace
-from src.schemas import ToolDecision
+from src.schemas import ToolDecision, ToolName
 from src.tools import calculator, web_fetch, web_search, wikipedia
 
 
@@ -26,6 +26,15 @@ class ToolResult:
     tool_name: str
     result: str
     error: str | None = None
+
+
+TOOL_ACTION_ARGUMENTS: Mapping[ToolName, str] = {
+    "web_search": "query",
+    "web_fetch": "url",
+    "wikipedia": "query",
+    "calculator": "expression",
+}
+TOOL_ACTIONS = frozenset(TOOL_ACTION_ARGUMENTS)
 
 
 TOOL_REGISTRY: dict[str, ToolSpec] = {
@@ -64,6 +73,24 @@ def tool_prompt() -> str:
     return "\n".join(spec.prompt_line() for spec in TOOL_REGISTRY.values())
 
 
+def is_tool_action(action: str) -> bool:
+    """Return True when an agent action maps directly to a registered tool."""
+    return action in TOOL_ACTION_ARGUMENTS
+
+
+def decision_for_action(action: str, action_input: str) -> ToolDecision | None:
+    """Translate an agent tool action into the stable ToolDecision interface."""
+    argument_name = TOOL_ACTION_ARGUMENTS.get(cast(ToolName, action))
+    if argument_name is None:
+        return None
+    return ToolDecision(
+        needs_tool=True,
+        tool_name=cast(ToolName, action),
+        arguments={argument_name: action_input},
+        reason="Agent tool action.",
+    )
+
+
 def execute(decision: ToolDecision) -> ToolResult:
     if not decision.needs_tool or decision.tool_name == "none":
         return ToolResult(success=False, tool_name="none", result="No tool needed.")
@@ -94,3 +121,11 @@ def execute(decision: ToolDecision) -> ToolResult:
     except Exception as exc:
         trace.tool_result(name, False, str(exc))
         return ToolResult(success=False, tool_name=name, result="", error=str(exc))
+
+
+def execute_action(action: str, action_input: str) -> ToolResult | None:
+    """Execute a direct tool action, or return None for non-tool actions."""
+    decision = decision_for_action(action, action_input)
+    if decision is None:
+        return None
+    return execute(decision)

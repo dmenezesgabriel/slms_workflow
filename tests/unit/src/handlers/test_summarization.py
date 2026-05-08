@@ -7,7 +7,6 @@ import pytest
 from src.handlers import summarization
 from src.schemas import FinalAnswer, SummaryResult
 
-
 NO_TEXT_ANSWER = "No text provided to summarize."
 TOKEN = "word"
 BELOW_MIN_CONTENT_WORD_COUNT = summarization._MIN_CONTENT_WORDS - 1
@@ -32,9 +31,7 @@ class TestContentGuard:
             "resuma",
         ],
     )
-    def test_returns_final_answer_when_prompt_has_insufficient_content(
-        self, prompt: str
-    ) -> None:
+    def test_returns_final_answer_when_prompt_has_insufficient_content(self, prompt: str) -> None:
         llm = MagicMock()
 
         result = summarization.handle(prompt, llm)
@@ -82,9 +79,7 @@ class TestTriggerPrefixStripping:
             ("resumo: este texto", "este texto"),
         ],
     )
-    def test_removes_supported_trigger_prefix(
-        self, prompt: str, expected_stripped: str
-    ) -> None:
+    def test_removes_supported_trigger_prefix(self, prompt: str, expected_stripped: str) -> None:
         result = summarization._TRIGGER_PREFIX.sub("", prompt).strip()
 
         assert result == expected_stripped

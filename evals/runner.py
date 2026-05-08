@@ -17,16 +17,14 @@ CLI inspection (no server):
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 import mlflow
 
-from src.router import classify_ml
-from src.schemas import IntentClassification
 from evals.dataset import (
     NER_CASES,
     QA_PROPER_NOUN_CASES,
@@ -44,6 +42,8 @@ from evals.metrics import (
     pct,
     timed,
 )
+from src.router import classify_ml
+from src.schemas import IntentClassification
 
 _MLFLOW_EXPERIMENT = "slms_evaluation"
 _MLRUNS_DIR = str(Path(__file__).parent.parent / "mlruns")
@@ -243,9 +243,7 @@ def _eval_summarization_guard() -> SummarizationGuardMetrics:
 
                 if not isinstance(result, SummaryResult):
                     m.guard_false_positives += 1
-                    failures.append(
-                        f"  FP    {prompt!r} → guard blocked legitimate input"
-                    )
+                    failures.append(f"  FP    {prompt!r} → guard blocked legitimate input")
             except AssertionError:
                 m.guard_false_positives += 1
                 failures.append(f"  FP    {prompt!r} → LLM not called for legitimate input")
@@ -351,14 +349,26 @@ def _print_report(
     if nm is not None:
         print("\n── Technique: NER (spaCy xx_ent_wiki_sm) ────────────────")
         print(_row("Entity recall:", f"{pct(nm.recall)}  ({nm.found}/{nm.total_expected})"))
-        print(_row("Temporal accuracy:", f"{pct(nm.temporal_accuracy)}  ({nm.temporal_correct}/{nm.temporal_total})"))
+        print(
+            _row(
+                "Temporal accuracy:",
+                f"{pct(nm.temporal_accuracy)}  ({nm.temporal_correct}/{nm.temporal_total})",
+            )
+        )
     else:
         print("\n── Technique: NER ───────────────────────────────────────")
         print("  (skipped — spaCy model not available)")
 
     print("\n── Technique: Summarization Guard ───────────────────────")
-    print(_row("Guard hit rate:", f"{pct(sgm.hit_rate)}  ({sgm.guard_caught}/{sgm.degenerate_total})"))
-    print(_row("False-positive rate:", f"{pct(sgm.false_positive_rate)}  ({sgm.guard_false_positives}/{sgm.legitimate_total})"))
+    print(
+        _row("Guard hit rate:", f"{pct(sgm.hit_rate)}  ({sgm.guard_caught}/{sgm.degenerate_total})")
+    )
+    print(
+        _row(
+            "False-positive rate:",
+            f"{pct(sgm.false_positive_rate)}  ({sgm.guard_false_positives}/{sgm.legitimate_total})",
+        )
+    )
 
     print("\n── Technique: QA Proper-Noun Fallback ───────────────────")
     print(_row("Extraction accuracy:", f"{pct(qam.accuracy)}  ({qam.correct}/{qam.total})"))
@@ -374,9 +384,7 @@ def _print_report(
 
 def _git_sha() -> str:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], text=True
-        ).strip()
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
     except Exception:
         return "unknown"
 
@@ -391,11 +399,14 @@ def _log_to_mlflow(
     mlflow.set_tracking_uri(_MLRUNS_DIR)
     mlflow.set_experiment(_MLFLOW_EXPERIMENT)
 
-    with mlflow.start_run(run_name=f"eval_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}") as run:
-        mlflow.set_tags({
-            "git_sha": _git_sha(),
-            "mode": "offline",
-        })
+    run_name = f"eval_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    with mlflow.start_run(run_name=run_name) as run:
+        mlflow.set_tags(
+            {
+                "git_sha": _git_sha(),
+                "mode": "offline",
+            }
+        )
 
         # Dataset sizes as params
         from evals.dataset import (
@@ -406,14 +417,17 @@ def _log_to_mlflow(
             TEMPORAL_CASES,
             TOOL_CASES,
         )
-        mlflow.log_params({
-            "dataset.routing_cases": len(ROUTING_CASES),
-            "dataset.tool_cases": len(TOOL_CASES),
-            "dataset.ner_cases": len(NER_CASES),
-            "dataset.temporal_cases": len(TEMPORAL_CASES),
-            "dataset.guard_cases": len(SUMMARIZATION_GUARD_CASES),
-            "dataset.qa_proper_noun_cases": len(QA_PROPER_NOUN_CASES),
-        })
+
+        mlflow.log_params(
+            {
+                "dataset.routing_cases": len(ROUTING_CASES),
+                "dataset.tool_cases": len(TOOL_CASES),
+                "dataset.ner_cases": len(NER_CASES),
+                "dataset.temporal_cases": len(TEMPORAL_CASES),
+                "dataset.guard_cases": len(SUMMARIZATION_GUARD_CASES),
+                "dataset.qa_proper_noun_cases": len(QA_PROPER_NOUN_CASES),
+            }
+        )
 
         # Per-technique metrics
         mlflow.log_metrics(rm.to_mlflow_dict())
@@ -423,7 +437,7 @@ def _log_to_mlflow(
         mlflow.log_metrics(sgm.to_mlflow_dict())
         mlflow.log_metrics(qam.to_mlflow_dict())
 
-        return run.info.run_id
+        return cast(str, run.info.run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -480,9 +494,9 @@ def main() -> None:
         print(f"MLflow run logged: {run_id}")
         print(f"  Tracking URI : {_MLRUNS_DIR}")
         print(f"  Experiment   : {_MLFLOW_EXPERIMENT}")
-        print(f"  CLI commands :")
+        print("  CLI commands :")
         print(f"    mlflow runs list --experiment-name {_MLFLOW_EXPERIMENT}")
-        print(f"    python -m evals.compare\n")
+        print("    python -m evals.compare\n")
 
     if save:
         out = Path(__file__).parent / "results.json"

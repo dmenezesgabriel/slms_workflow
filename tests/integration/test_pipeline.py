@@ -45,15 +45,16 @@ class TestFullPipeline:
     def test_degenerate_summarization_handled(self, llm_client: object) -> None:
         result = run("summarize this text for me", llm_client)  # type: ignore[arg-type]
         answer = extract_text(result)
-        assert "No text provided" in answer, (
-            f"Expected guard message, got: {answer!r}"
-        )
+        assert "No text provided" in answer, f"Expected guard message, got: {answer!r}"
 
 
 @pytest.mark.integration
 class TestRouterWithLLMFallback:
     def test_low_confidence_falls_back_to_llm(self, llm_client: object) -> None:
         # This should fall below the TF-IDF threshold and use the LLM router
-        result = run("I was wondering if you might be able to assist me", llm_client)  # type: ignore[arg-type]
+        result = run(
+            "I was wondering if you might be able to assist me",
+            llm_client,  # type: ignore[arg-type]
+        )
         answer = extract_text(result)
         assert len(answer.strip()) > 0
