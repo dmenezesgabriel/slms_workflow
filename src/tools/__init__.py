@@ -7,6 +7,8 @@ from src import trace
 from src.schemas import ToolDecision, ToolName
 from src.tools.base import Tool
 from src.tools.calculator import Calculator
+from src.tools.duckdb import DuckDBTool
+from src.tools.playwright import PlaywrightTool
 from src.tools.web_fetch import WebFetch
 from src.tools.web_search import WebSearch
 from src.tools.wikipedia import Wikipedia
@@ -26,6 +28,8 @@ class ToolRegistry:
         "web_fetch": "url",
         "wikipedia": "query",
         "calculator": "expression",
+        "playwright": "action",
+        "duckdb": "query",
     }
 
     def __init__(self, tools: Sequence[Tool]) -> None:
@@ -93,7 +97,16 @@ class ToolRegistry:
         return execute(decision)
 
 
-TOOL_REGISTRY = ToolRegistry([Calculator(), WebSearch(), WebFetch(), Wikipedia()])
+TOOL_REGISTRY = ToolRegistry(
+    [
+        Calculator(),
+        WebSearch(),
+        WebFetch(),
+        Wikipedia(),
+        PlaywrightTool(),
+        DuckDBTool(),
+    ]
+)
 
 # Module-level public API — callers and tests use these names directly.
 # execute_action deliberately calls the module-level execute so monkeypatching

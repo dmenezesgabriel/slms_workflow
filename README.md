@@ -70,3 +70,16 @@ uv run behave features
 sudo apt update
 sudo apt install -y build-essential python3-dev cmake ninja-build
 ```
+
+## References
+
+- https://towardsdatascience.com/rag-hallucinates-i-built-a-self-healing-layer-that-fixes-it-in-real-time/
+- https://towardsdatascience.com/rag-isnt-enough-i-built-the-missing-context-layer-that-makes-llm-systems-work/
+- https://towardsdatascience.com/your-rag-gets-confidently-wrong-as-memory-grows-i-built-the-memory-layer-that-stops-it/
+
+- https://lalatenduswain.medium.com/choosing-the-right-small-language-model-for-rag-a-comprehensive-comparison-guide-6e60044441ac
+- https://arxiv.org/html/2501.06713v1
+https://developers.googleblog.com/google-ai-edge-small-language-models-multimodality-rag-function-calling/
+- https://towardsdatascience.com/your-react-agent-is-wasting-90-of-its-retries-heres-how-to-stop-it/
+
+- https://arxiv.org/pdf/2212.10915

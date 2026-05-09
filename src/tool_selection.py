@@ -141,3 +141,14 @@ def deterministic_decision(user_input: str) -> ToolDecision | None:
             reason="Deterministic math extraction.",
         )
     return deterministic_tool(user_input) or ner_tool(user_input)
+
+
+def is_math_expression(text: str) -> bool:
+    """Check if text contains a math expression."""
+    return extract_math(text) is not None
+
+
+def is_calculator_intent(text: str) -> bool:
+    """Check if text indicates calculator intent."""
+    expression = extract_math(text)
+    return expression is not None

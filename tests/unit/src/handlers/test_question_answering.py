@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src import retrieval
 from src.handlers import question_answering
+from src.patterns import PROPER_NOUN_RE, WHAT_IS_RE
 from src.schemas import FinalAnswer
 
 WHAT_IS_PROMPT = "What is spaCy?"
@@ -28,21 +30,21 @@ class TestWhatIsPattern:
     def test_matches_supported_question_phrase(self, phrase: str) -> None:
         text = f"{phrase} something"
 
-        result = question_answering._WHAT_IS_RE.search(text)
+        result = WHAT_IS_RE.search(text)
 
         assert result is not None
 
     def test_does_not_match_non_question_phrase(self) -> None:
         text = "explain what matters most"
 
-        result = question_answering._WHAT_IS_RE.search(text)
+        result = WHAT_IS_RE.search(text)
 
         assert result is None
 
     def test_matches_without_case_sensitivity(self) -> None:
         text = "WHAT IS Python"
 
-        result = question_answering._WHAT_IS_RE.search(text)
+        result = WHAT_IS_RE.search(text)
 
         assert result is not None
 
@@ -61,21 +63,21 @@ class TestProperNounPattern:
         ],
     )
     def test_matches_entity_after_question_phrase(self, prompt: str, expected_entity: str) -> None:
-        question_match = question_answering._WHAT_IS_RE.search(prompt)
+        question_match = WHAT_IS_RE.search(prompt)
 
         assert question_match is not None
 
-        result = question_answering._PROPER_NOUN_RE.search(prompt, question_match.end())
+        result = PROPER_NOUN_RE.search(prompt, question_match.end())
 
         assert result is not None
         assert result.group(PROPER_NOUN_GROUP) == expected_entity
 
     def test_does_not_return_question_word_as_entity(self) -> None:
-        question_match = question_answering._WHAT_IS_RE.search(WHAT_IS_PROMPT)
+        question_match = WHAT_IS_RE.search(WHAT_IS_PROMPT)
 
         assert question_match is not None
 
-        result = question_answering._PROPER_NOUN_RE.search(WHAT_IS_PROMPT, question_match.end())
+        result = PROPER_NOUN_RE.search(WHAT_IS_PROMPT, question_match.end())
 
         assert result is not None
         assert result.group(PROPER_NOUN_GROUP) == PROPER_NOUN
@@ -94,7 +96,7 @@ class TestProperNounPattern:
     def test_matches_only_supported_proper_noun_shapes(
         self, text: str, expected_match: bool
     ) -> None:
-        result = question_answering._PROPER_NOUN_RE.search(text)
+        result = PROPER_NOUN_RE.search(text)
 
         assert bool(result) is expected_match
 
@@ -104,7 +106,7 @@ class TestNeedsRetrieval:
         is_temporal = MagicMock(return_value=False)
         monkeypatch.setattr("src.ner.is_temporal", is_temporal)
 
-        result = question_answering._needs_retrieval(URL_PROMPT)
+        result = retrieval.needs_retrieval(URL_PROMPT)
 
         assert result is True
         assert is_temporal.call_count == 0
@@ -115,7 +117,7 @@ class TestNeedsRetrieval:
         is_temporal = MagicMock(return_value=False)
         monkeypatch.setattr("src.ner.is_temporal", is_temporal)
 
-        result = question_answering._needs_retrieval(RETRIEVAL_SIGNAL_PROMPT)
+        result = retrieval.needs_retrieval(RETRIEVAL_SIGNAL_PROMPT)
 
         assert result is True
         assert is_temporal.call_count == 0
@@ -126,7 +128,7 @@ class TestNeedsRetrieval:
         is_temporal = MagicMock(return_value=True)
         monkeypatch.setattr("src.ner.is_temporal", is_temporal)
 
-        result = question_answering._needs_retrieval(TEMPORAL_PROMPT)
+        result = retrieval.needs_retrieval(TEMPORAL_PROMPT)
 
         assert result is True
         assert is_temporal.call_count == 1
@@ -138,7 +140,7 @@ class TestNeedsRetrieval:
         is_temporal = MagicMock(return_value=False)
         monkeypatch.setattr("src.ner.is_temporal", is_temporal)
 
-        result = question_answering._needs_retrieval(STATIC_PROMPT)
+        result = retrieval.needs_retrieval(STATIC_PROMPT)
 
         assert result is False
         assert is_temporal.call_count == 1

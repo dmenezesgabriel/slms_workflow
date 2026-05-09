@@ -1,17 +1,79 @@
-@integration @requires_llm @agent
+@integration @requires_llm @agent @loop
 Feature: Agent loop tool use
   The explicit agent mode should use tools for multi-step prompts and synthesize
-  a usable answer from the tool result.
+  a usable answer from the tool results.
 
-  Scenario Outline: Agent loop invokes the expected tool path
+  Background: Server availability
     Given the local LLM server is available
-    When I run the agent with "<prompt>"
-    Then the answer should be usable
-    And the trace should include "<path>"
-    And the answer should contain at least one of "<terms>"
 
-    Examples:
-      | prompt                                                       | path       | terms           |
-      | search for llama.cpp and tell me what it is                   | web_search | llama,inference |
-      | what is the square root of 256?                               | calculator | 16              |
-      | calculate 7 times 8 and tell me if the result is even or odd  | calculator | 56              |
+  Rule: Multi-step tool invocation
+    Scenario Outline: Agent loop invokes correct tool based on prompt
+      When I run the agent with "<prompt>"
+      Then the answer should be usable
+      And the trace should include "<path>"
+      And the answer should contain at least one of "<terms>"
+
+      Examples:
+        | prompt                                                       | path       | terms           |
+        | search for llama.cpp and tell me what it is                   | web_search | llama,inference |
+        | what is the square root of 256?                               | calculator | 16              |
+        | calculate 7 times 8 and tell me if the result is even or odd  | calculator | 56              |
+
+  Rule: Tool result synthesis
+    Scenario: Agent synthesizes information from tool result
+      When I run the agent with "search for Python tutorials and summarize the top result"
+      Then the answer should be usable
+      And the trace should include "web_search"
+      And the answer should contain at least one of "Python,tutorial,result"
+
+  Rule: Multiple tool sequences
+    Scenario: Agent uses multiple tools in sequence
+      When I run the agent with "find information about quantum computing then explain it simply"
+      Then the answer should be usable
+      And the trace should include "web_search" or "wikipedia"
+
+  Rule: Error handling and recovery
+    Scenario: Agent handles tool failure gracefully
+      When I run the agent with "search for nonexistentconcept123456789"
+      Then the answer should be usable
+      And the trace should include "web_search"
+
+  Rule: Performance under agent loop
+    Scenario: Agent completes within reasonable time
+      When I run the agent with "search for AI news"
+      Then the answer should be usable
+      And the response time should be under 60 seconds
+
+  Rule: Cross-tool orchestration (Hyperautomation)
+    Scenario: Agent chains web search to data extraction to analytics
+      When I run the agent with "find top 5 AI companies, get their stock prices, and calculate average"
+      Then the answer should be usable
+      And the trace should include "web_search"
+      And the trace should include "duckdb" or "calculator"
+
+    Scenario: Agent combines web scraping with data analysis
+      When I run the agent with "scrape the product prices from example.com and find the average"
+      Then the answer should be usable
+      And the trace should include "playwright" or "web_fetch"
+
+    Scenario: Agent performs multi-step data pipeline
+      When I run the agent with "search for CSV file about sales, then calculate total revenue"
+      Then the answer should be usable
+      And the trace should include "web_search" or "duckdb"
+
+  Rule: Self-correction and reflection
+    Scenario: Agent retries failed tool with refined parameters
+      When I run the agent with "search for xyznonexistent123456 search again for python tutorials"
+      Then the answer should be usable
+
+  Rule: Human-in-loop patterns
+    Scenario: Agent handles confirmation request
+      When I run the agent with "should I proceed with the payment? say yes or no"
+      Then the answer should be usable
+      And the answer should contain at least one of "yes,no,confirm,proceed"
+
+  Rule: Long-running workflow
+    Scenario: Agent handles multi-step process with checkpoint
+      When I run the agent with "do three searches: AI news, Python tutorials, quantum computing, then summarize all three"
+      Then the answer should be usable
+      And the trace should include "web_search"

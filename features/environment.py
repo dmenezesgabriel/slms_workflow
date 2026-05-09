@@ -11,24 +11,23 @@ def before_all(context: Any) -> None:
 
 
 def after_scenario(context: Any, scenario: Any) -> None:
-    answer = getattr(context, "last_answer", None)
-    if answer is None:
+    result = getattr(context, "last_result", None)
+    if result is None:
         return
 
-    score = score_result(answer)
+    score = score_result(result.answer)
     context.evaluation_results.append(
         {
             "name": scenario.name,
             "status": str(scenario.status),
-            "elapsed_ms": getattr(context, "last_elapsed_ms", 0.0),
+            "elapsed_ms": result.elapsed_ms,
             "quality": score.quality,
             "usable": score.is_usable,
         }
     )
 
-    context.last_answer = None
-    context.last_trace_lines = []
-    context.last_elapsed_ms = 0.0
+    context.last_result = None
+    context.last_evaluation = None
 
 
 def after_all(context: Any) -> None:

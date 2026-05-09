@@ -49,6 +49,49 @@ class AcceptanceResult:
 
 CASES: tuple[AcceptanceCase, ...] = (
     AcceptanceCase(
+        id="python_creator",
+        prompt="Who created the Python programming language and when was it first released?",
+        ground_truth=(
+            "Python was created by Guido van Rossum. Development began in the late 1980s "
+            "and Python 0.9.0 was first released in 1991."
+        ),
+        required_any=(
+            ("guido", "rossum"),
+            ("1991", "1989", "1990"),
+        ),
+        expected_trace_any=("question_answering",),
+        notes="Well-known authorship fact; SLMs reliably know this without retrieval.",
+    ),
+    AcceptanceCase(
+        id="ml_pt",
+        prompt="O que é machine learning e como ele funciona?",
+        ground_truth=(
+            "Machine learning é um subcampo da inteligência artificial onde sistemas "
+            "aprendem padrões a partir de dados sem serem explicitamente programados. "
+            "A resposta deve mencionar dados, modelos ou treinamento."
+        ),
+        required_any=(
+            ("aprendizado", "machine learning", "aprender"),
+            ("dados", "data", "modelo", "treinamento"),
+        ),
+        expected_trace_any=("question_answering",),
+        notes="Portuguese-language query; tests multilingual grounding.",
+    ),
+    AcceptanceCase(
+        id="binary_search_complexity",
+        prompt="What is the time complexity of binary search and why?",
+        ground_truth=(
+            "Binary search has O(log n) time complexity because it halves the search "
+            "space at each step, requiring at most log₂(n) comparisons."
+        ),
+        required_any=(
+            ("log", "o(log", "logarithm"),
+            ("halv", "divid", "split", "middle"),
+        ),
+        expected_trace_any=("question_answering", "agent"),
+        notes="Algorithmic reasoning; SLMs know this reliably. Tests structured technical output.",
+    ),
+    AcceptanceCase(
         id="hitchhiker",
         prompt="which is the movie which says that the meaning of life is 42?",
         ground_truth=(

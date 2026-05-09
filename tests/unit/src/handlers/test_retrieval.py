@@ -65,7 +65,7 @@ class TestDefaultRetriever:
         prompt = "which song says hello from the other side?"
         result = _make_retriever(web_search=mock_search).fetch_context(prompt)
 
-        assert result.startswith("Likely answer inferred from web evidence: Result")
+        assert result == "compressed search context"
         assert mock_search.execute.call_count == 2
         mock_search.execute.assert_any_call({"query": prompt, "max_results": 5})
         mock_search.execute.assert_any_call(
@@ -74,5 +74,5 @@ class TestDefaultRetriever:
         compress.assert_called_once_with(
             "Title: Result\nSnippet: useful clue text\n\nTitle: Result\nSnippet: useful clue text",
             query=prompt,
-            max_sentences=retrieval._MAX_CONTEXT_SENTENCES,
+            max_sentences=8,
         )

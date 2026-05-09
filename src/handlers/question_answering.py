@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from src import retrieval
+from src import grounding, retrieval, tool_selection
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
+from src.rag import store_retrieval_results
 from src.schemas import FinalAnswer
 
 
-def _needs_retrieval(text: str) -> bool:
-    return retrieval.needs_retrieval(text)
+def _needs_rag_context(text: str) -> bool:
+    if tool_selection.is_math_expression(text):
+        return False
+    if tool_selection.is_calculator_intent(text):
+        return False
+    return True
 
 
 def _fetch_context(user_input: str) -> str:
@@ -21,6 +26,9 @@ class QuestionAnsweringHandler:
 
     def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
         retrieved = _fetch_context(user_input)
+
+        if retrieved and _needs_rag_context(user_input):
+            store_retrieval_results([retrieved], ["retrieval_cache"])
 
         user_message = (
             f"Context:\n{retrieved}\n\nQuestion: {user_input}" if retrieved else user_input
@@ -38,9 +46,11 @@ class QuestionAnsweringHandler:
             FinalAnswer,
         )
 
-        candidate = retrieval.candidate_answer_from_context(retrieved)
-        if candidate and candidate.lower() not in result.answer.lower():
-            return FinalAnswer(answer=candidate)
+        if retrieved:
+            gr = grounding.evaluate(result.answer, retrieved)
+            answer = gr.answer if gr.route in ("accept", "healed_accept") else result.answer
+            return FinalAnswer(answer=answer)
+
         return result
 
 

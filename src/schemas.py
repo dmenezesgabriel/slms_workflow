@@ -14,7 +14,15 @@ IntentName = Literal[
     "unclassified",
 ]
 
-ToolName = Literal["none", "calculator", "web_search", "web_fetch", "wikipedia"]
+ToolName = Literal[
+    "none",
+    "calculator",
+    "web_search",
+    "web_fetch",
+    "wikipedia",
+    "playwright",
+    "duckdb",
+]
 
 
 class IntentClassification(BaseModel):
