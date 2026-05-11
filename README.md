@@ -83,3 +83,7 @@ https://developers.googleblog.com/google-ai-edge-small-language-models-multimoda
 - https://towardsdatascience.com/your-react-agent-is-wasting-90-of-its-retries-heres-how-to-stop-it/
 
 - https://arxiv.org/pdf/2212.10915
+
+## References
+
+- https://github.com/daveebbelaar/ai-cookbook
