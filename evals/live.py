@@ -26,7 +26,7 @@ from typing import Callable
 # Force trace on for the entire run
 os.environ["SLM_TRACE"] = "1"
 
-from src.scoring import score_result  # noqa: E402
+from src.techniques.scoring import score_result  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Test case types
@@ -345,20 +345,24 @@ def _run_direct(prompt: str) -> str:
 
 
 def _run_workflow(name: str, prompt: str) -> str:
+    from src import trace as trace_module
     from src.context import extract_text
     from src.providers.openai_local import OpenAILocalClient
     from src.workflow import WORKFLOW_REGISTRY, run_workflow
 
+    trace_module.init()
     wf = WORKFLOW_REGISTRY[name]
     result = run_workflow(wf, prompt, OpenAILocalClient())
     return extract_text(result)
 
 
 def _run_agent(prompt: str) -> str:
+    from src import trace as trace_module
     from src.agent import run_agent
     from src.context import extract_text
     from src.providers.openai_local import OpenAILocalClient
 
+    trace_module.init()
     result = run_agent(prompt, OpenAILocalClient())
     return extract_text(result)
 
@@ -478,6 +482,16 @@ _TRACE_KEYS = (
     "agent.step",
     "workflow.step",
     "agent.final",
+    "handler",
+    "llm.request",
+    "llm.response",
+    "grounding.check",
+    "grounding.result",
+    "plan.step",
+    "composition",
+    "dag.exec",
+    "dag.skip",
+    "fast_path",
 )
 
 

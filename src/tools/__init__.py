@@ -74,7 +74,7 @@ class ToolRegistry:
         trace.tool_call(decision.tool_name, decision.arguments)
         try:
             result = tool.execute(decision.arguments)
-            from src.scoring import score_result
+            from src.techniques.scoring import score_result
 
             score = score_result(result)
             trace.tool_result(decision.tool_name, score.is_usable, result[:120])

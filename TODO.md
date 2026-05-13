@@ -1,6 +1,0 @@
-- Replace hardcoded string blacklists with algorithmic/ML-based approaches. The modules have too many brittle heuristics
-- Analytics Engineer Agent: Acts as an AI assistant that can create calculated fields, build visualizations, and answer analytical questions.
-- Data Storytelling & Summaries: Automatically generates narratives that describe key patterns, outliers, and trends.
-- Semantic Modeling Support: AI assists in mapping data and creating consistent definitions (e.g., defining "Profit" vs. "Revenue").
-- Context Retention: The Agent remembers previous questions to support follow-up questions, similar to chat interfaces.
-- Transforms complex datasets into clear, narrative insights by automatically generating written explanations of your data

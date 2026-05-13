@@ -68,6 +68,9 @@ class ExecutionPort:
 
 
 def _capture_execution(fn: Callable[[], str]) -> ExecutionResult:
+    from src import trace as trace_module
+
+    trace_module.init()
     buffer = io.StringIO()
     started_at = time.perf_counter()
     with redirect_stderr(buffer):

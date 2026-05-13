@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
+from src import trace
 from src.llm_client import LLMRequest, LLMResponse
 
 T = TypeVar("T", bound=BaseModel)
@@ -25,27 +26,34 @@ class OpenAILocalClient:
         )
 
     def complete(self, request: LLMRequest) -> LLMResponse:
-        kwargs: dict[str, Any] = {
-            "model": request.model,
-            "messages": [
-                {"role": "system", "content": request.system},
-                {"role": "user", "content": request.user},
-            ],
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
-        }
+        trace.llm_request(request.model, request.max_tokens)
+        try:
+            kwargs: dict[str, Any] = {
+                "model": request.model,
+                "messages": [
+                    {"role": "system", "content": request.system},
+                    {"role": "user", "content": request.user},
+                ],
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+            }
 
-        if request.tools is not None:
-            kwargs["tools"] = request.tools
+            if request.tools is not None:
+                kwargs["tools"] = request.tools
 
-        response = self.client.chat.completions.create(**kwargs)
+            response = self.client.chat.completions.create(**kwargs)
 
-        message = response.choices[0].message
+            message = response.choices[0].message
 
-        return LLMResponse(
-            text=message.content or "",
-            raw=response,
-        )
+            result = LLMResponse(
+                text=message.content or "",
+                raw=response,
+            )
+            trace.llm_response(request.model, True)
+            return result
+        except Exception as exc:
+            trace.llm_response(request.model, False, str(exc))
+            raise
 
     def structured(
         self,
@@ -53,6 +61,7 @@ class OpenAILocalClient:
         schema: type[T],
         retries: int = 1,
     ) -> T:
+        trace.llm_request(request.model, request.max_tokens)
         json_schema = schema.model_json_schema()
         last_error: Exception | None = None
 
@@ -98,8 +107,10 @@ class OpenAILocalClient:
 
             try:
                 data = json.loads(content)
+                trace.llm_response(request.model, True)
                 return schema.model_validate(data)
             except (json.JSONDecodeError, ValidationError) as error:
                 last_error = error
 
+        trace.llm_response(request.model, False, str(last_error))
         raise RuntimeError(f"Failed to produce valid {schema.__name__}: {last_error}")

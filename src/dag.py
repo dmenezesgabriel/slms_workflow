@@ -1,43 +1,50 @@
 from __future__ import annotations
 
+import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable
 
 from pydantic import BaseModel
 
 from src import trace
-from src.context import compress, extract_text
-from src.handlers import HANDLER_REGISTRY
+from src.context import CompressFn, ExecutionContext, ExtractFn
 from src.llm_client import LLMClient
-from src.patterns import URL_RE as _URL_PATTERN  # noqa: F401
-from src.retrieval import needs_retrieval
-from src.schemas import FinalAnswer
+from src.nodes.base import WorkflowNode
+from src.patterns import URL_RE as _URL_PATTERN
+from src.text_utils import compress, extract_text
+from src.trace_types import ExecutionTrace, NodeTrace
 
-ConditionName = Literal[
-    "always",
-    "if_retrieval_needed",
-    "if_not_retrieval_needed",
-    "if_query_has_url",
-    "if_query_has_no_url",
-]
+ConditionFn = Callable[[str], bool]
+
+CONDITION_REGISTRY: dict[str, ConditionFn] = {}
+
+
+def register_condition(name: str, fn: ConditionFn) -> None:
+    """Register a named condition predicate for use in DagNode.condition."""
+    CONDITION_REGISTRY[name] = fn
+
+
+register_condition("always", lambda _: True)
+register_condition("if_query_has_url", lambda text: bool(_URL_PATTERN.search(text)))
+register_condition("if_query_has_no_url", lambda text: not bool(_URL_PATTERN.search(text)))
 
 
 @dataclass(frozen=True)
 class DagNode:
     """One deterministic unit in an agentic workflow graph.
 
-    intent maps to the existing handler registry. input_format can reference:
+    node is the WorkflowNode to execute; input_format can reference:
       - {query}: original user prompt
       - {input}: current compressed output from the most recently executed node
       - {node_id}: text output of any dependency or previously executed node
     """
 
     id: str
-    intent: str
+    node: WorkflowNode
     input_format: str = "{input}"
     depends_on: tuple[str, ...] = ()
-    condition: ConditionName = "always"
+    condition: str = "always"
 
 
 @dataclass(frozen=True)
@@ -51,72 +58,95 @@ class DagWorkflow:
 _MAX_NODE_INPUT_CHARS = 900
 
 
-class _FormatValues(dict[str, str]):
-    def __missing__(self, key: str) -> str:
-        return ""
+def run_dag_workflow(
+    graph: DagWorkflow,
+    user_input: str,
+    llm: LLMClient,
+    compress_fn: CompressFn | None = None,
+    extract_fn: ExtractFn | None = None,
+) -> tuple[BaseModel, ExecutionTrace]:
+    """Execute a deterministic DAG workflow and return (result, trace).
 
+    Each node's WorkflowNode.execute is called with its rendered input.
+    compress_fn defaults to text_utils.compress.
+    extract_fn defaults to text_utils.extract_text.
+    """
+    _compress = compress_fn or (lambda text, query: compress(text, query=query, max_sentences=5))
+    _extract = extract_fn or extract_text
 
-def run_dag_workflow(graph: DagWorkflow, user_input: str, llm: LLMClient) -> BaseModel:
-    """Execute a deterministic DAG workflow and return the selected final result."""
+    _validate_dag(graph)
+
+    ctx = ExecutionContext(
+        query=user_input,
+        _compress=_compress,
+        _extract=_extract,
+    )
 
     order = _topological_order(graph)
-    outputs: dict[str, str] = {}
-    results: dict[str, BaseModel] = {}
-    current = user_input
+    exec_trace = ExecutionTrace(workflow_name=graph.name)
 
     for node_id in order:
         node = _node_by_id(graph, node_id)
         if not _condition_matches(node.condition, user_input):
-            trace.dag_skip(graph.name, node.id, node.condition)
+            trace.dag_skip_node(node_id, node.condition)
             continue
 
-        node_input = _render_input(node.input_format, user_input, current, outputs)
+        node_input = ctx.render(node.input_format)
         if len(node_input) > _MAX_NODE_INPUT_CHARS:
             node_input = node_input[:_MAX_NODE_INPUT_CHARS]
 
-        trace.dag_node(graph.name, node.id, node.intent, node_input)
-        result = HANDLER_REGISTRY.dispatch(node.intent, node_input, llm)
-        text = extract_text(result)
+        t0 = time.monotonic()
+        error: str | None = None
+        try:
+            trace.dag_exec_node(node_id, node.node.id)
+            result = node.node.execute(node_input, llm)
+        except Exception as exc:
+            result = None
+            error = str(exc)
+        elapsed = (time.monotonic() - t0) * 1000
 
-        results[node.id] = result
-        outputs[node.id] = text
-        current = compress(text, query=user_input, max_sentences=5)
+        if result is not None:
+            ctx.record(node.id, result)
+
+        exec_trace.nodes[node.id] = NodeTrace(
+            node_id=node.id,
+            intent=node.node.id,
+            input_=node_input,
+            output=_extract(result) if result is not None else "",
+            elapsed_ms=round(elapsed, 1),
+            error=error,
+        )
 
     final_id = graph.final_node or (order[-1] if order else None)
-    if final_id and final_id in results:
-        return results[final_id]
+    if final_id and final_id in ctx.results:
+        return ctx.results[final_id], exec_trace
 
-    if results:
-        last_id = next(reversed(results))
-        return results[last_id]
+    last = ctx.last_result()
+    if last is not None:
+        return last, exec_trace
 
-    return FinalAnswer(answer="No DAG node was executed for this request.")
+    from src.schemas import FinalAnswer  # local import — dag.py should not know domain schemas
 
-
-def _render_input(
-    input_format: str,
-    user_input: str,
-    current: str,
-    outputs: dict[str, str],
-) -> str:
-    values = _FormatValues({"query": user_input, "input": current})
-    values.update(outputs)
-    return input_format.format_map(values)
+    return FinalAnswer(answer="No DAG node was executed for this request."), exec_trace
 
 
-def _condition_matches(condition: ConditionName, user_input: str) -> bool:
-    has_url = _URL_PATTERN.search(user_input) is not None
-    if condition == "always":
-        return True
-    if condition == "if_retrieval_needed":
-        return needs_retrieval(user_input)
-    if condition == "if_not_retrieval_needed":
-        return not needs_retrieval(user_input)
-    if condition == "if_query_has_url":
-        return has_url
-    if condition == "if_query_has_no_url":
-        return not has_url
-    return False
+def _validate_dag(graph: DagWorkflow) -> None:
+    for node in graph.nodes:
+        if node.condition not in CONDITION_REGISTRY:
+            raise ValueError(
+                f"Unknown DAG condition {node.condition!r} in {graph.name!r} node {node.id!r}. "
+                f"Registered: {sorted(CONDITION_REGISTRY)}"
+            )
+
+
+def _condition_matches(condition: str, user_input: str) -> bool:
+    fn = CONDITION_REGISTRY.get(condition)
+    if fn is None:
+        raise ValueError(
+            f"Unknown DAG condition: {condition!r}. "
+            f"Registered conditions: {sorted(CONDITION_REGISTRY)}"
+        )
+    return fn(user_input)
 
 
 def _node_by_id(graph: DagWorkflow, node_id: str) -> DagNode:

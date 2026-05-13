@@ -3,7 +3,7 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
-from src.scoring import score_result
+from src.techniques.scoring import score_result
 
 
 def before_all(context: Any) -> None:

@@ -4,10 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src import retrieval
-from src.handlers import question_answering
+from src.handlers.question_answering import QuestionAnsweringHandler
 from src.patterns import PROPER_NOUN_RE, WHAT_IS_RE
 from src.schemas import FinalAnswer
+from src.techniques.retrieval import needs_retrieval
 
 WHAT_IS_PROMPT = "What is spaCy?"
 PROPER_NOUN = "spaCy"
@@ -104,9 +104,9 @@ class TestProperNounPattern:
 class TestNeedsRetrieval:
     def test_returns_true_when_prompt_contains_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         is_temporal = MagicMock(return_value=False)
-        monkeypatch.setattr("src.ner.is_temporal", is_temporal)
+        monkeypatch.setattr("src.techniques.ner.is_temporal", is_temporal)
 
-        result = retrieval.needs_retrieval(URL_PROMPT)
+        result = needs_retrieval(URL_PROMPT)
 
         assert result is True
         assert is_temporal.call_count == 0
@@ -115,9 +115,9 @@ class TestNeedsRetrieval:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         is_temporal = MagicMock(return_value=False)
-        monkeypatch.setattr("src.ner.is_temporal", is_temporal)
+        monkeypatch.setattr("src.techniques.ner.is_temporal", is_temporal)
 
-        result = retrieval.needs_retrieval(RETRIEVAL_SIGNAL_PROMPT)
+        result = needs_retrieval(RETRIEVAL_SIGNAL_PROMPT)
 
         assert result is True
         assert is_temporal.call_count == 0
@@ -126,9 +126,9 @@ class TestNeedsRetrieval:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         is_temporal = MagicMock(return_value=True)
-        monkeypatch.setattr("src.ner.is_temporal", is_temporal)
+        monkeypatch.setattr("src.techniques.ner.is_temporal", is_temporal)
 
-        result = retrieval.needs_retrieval(TEMPORAL_PROMPT)
+        result = needs_retrieval(TEMPORAL_PROMPT)
 
         assert result is True
         assert is_temporal.call_count == 1
@@ -138,9 +138,9 @@ class TestNeedsRetrieval:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         is_temporal = MagicMock(return_value=False)
-        monkeypatch.setattr("src.ner.is_temporal", is_temporal)
+        monkeypatch.setattr("src.techniques.ner.is_temporal", is_temporal)
 
-        result = retrieval.needs_retrieval(STATIC_PROMPT)
+        result = needs_retrieval(STATIC_PROMPT)
 
         assert result is False
         assert is_temporal.call_count == 1
@@ -148,23 +148,35 @@ class TestNeedsRetrieval:
 
 
 class TestHandle:
+    def _make_handler(
+        self,
+        fetch_return: str = CONTEXT,
+        grounding_layer=None,
+        rag_store=None,
+    ) -> tuple[QuestionAnsweringHandler, MagicMock]:
+        mock_retriever = MagicMock()
+        mock_retriever.fetch_context.return_value = fetch_return
+        handler = QuestionAnsweringHandler(
+            retriever=mock_retriever,
+            grounding_layer=grounding_layer,
+            rag_store=rag_store,
+        )
+        return handler, mock_retriever
+
     def test_sends_retrieved_context_to_llm_when_context_exists(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         llm = MagicMock()
         llm.structured.return_value = ANSWER
-        fetch_context = MagicMock(return_value=CONTEXT)
         llm_request_class = MagicMock(return_value=LLM_REQUEST)
-        monkeypatch.setattr(question_answering, "_fetch_context", fetch_context)
-        monkeypatch.setattr(question_answering, "LLMRequest", llm_request_class)
+        monkeypatch.setattr("src.handlers.question_answering.LLMRequest", llm_request_class)
+        handler, mock_retriever = self._make_handler(fetch_return=CONTEXT)
 
-        result = question_answering.handle(STATIC_PROMPT, llm)
+        result = handler.handle(STATIC_PROMPT, llm)
 
         assert result == ANSWER
-        assert fetch_context.call_count == 1
-        fetch_context.assert_called_once_with(STATIC_PROMPT)
+        mock_retriever.fetch_context.assert_called_once_with(STATIC_PROMPT)
         assert llm_request_class.call_count == 1
-        assert llm.structured.call_count == 1
         llm.structured.assert_called_once_with(LLM_REQUEST, FinalAnswer)
         assert f"Context:\n{CONTEXT}" in llm_request_class.call_args.kwargs["user"]
         assert f"Question: {STATIC_PROMPT}" in llm_request_class.call_args.kwargs["user"]
@@ -174,17 +186,66 @@ class TestHandle:
     ) -> None:
         llm = MagicMock()
         llm.structured.return_value = ANSWER
-        fetch_context = MagicMock(return_value=NO_CONTEXT)
         llm_request_class = MagicMock(return_value=LLM_REQUEST)
-        monkeypatch.setattr(question_answering, "_fetch_context", fetch_context)
-        monkeypatch.setattr(question_answering, "LLMRequest", llm_request_class)
+        monkeypatch.setattr("src.handlers.question_answering.LLMRequest", llm_request_class)
+        handler, mock_retriever = self._make_handler(fetch_return=NO_CONTEXT)
 
-        result = question_answering.handle(STATIC_PROMPT, llm)
+        result = handler.handle(STATIC_PROMPT, llm)
 
         assert result == ANSWER
-        assert fetch_context.call_count == 1
-        fetch_context.assert_called_once_with(STATIC_PROMPT)
+        mock_retriever.fetch_context.assert_called_once_with(STATIC_PROMPT)
         assert llm_request_class.call_count == 1
         assert llm_request_class.call_args.kwargs["user"] == STATIC_PROMPT
-        assert llm.structured.call_count == 1
         llm.structured.assert_called_once_with(LLM_REQUEST, FinalAnswer)
+
+    def test_calls_rag_store_when_context_exists_and_not_math(self) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        rag_store = MagicMock()
+        handler, _ = self._make_handler(fetch_return=CONTEXT, rag_store=rag_store)
+
+        handler.handle(STATIC_PROMPT, llm)
+
+        rag_store.assert_called_once_with([CONTEXT], ["retrieval_cache"])
+
+    def test_skips_rag_store_when_no_context(self) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        rag_store = MagicMock()
+        handler, _ = self._make_handler(fetch_return=NO_CONTEXT, rag_store=rag_store)
+
+        handler.handle(STATIC_PROMPT, llm)
+
+        rag_store.assert_not_called()
+
+    def test_applies_grounding_when_context_exists(self) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        grounding_layer = MagicMock()
+        grounding_layer.evaluate.return_value = MagicMock(route="accept", answer="grounded answer")
+        handler, _ = self._make_handler(fetch_return=CONTEXT, grounding_layer=grounding_layer)
+
+        result = handler.handle(STATIC_PROMPT, llm)
+
+        grounding_layer.evaluate.assert_called_once_with(ANSWER.answer, CONTEXT)
+        assert isinstance(result, FinalAnswer)
+        assert result.answer == "grounded answer"
+
+    def test_skips_grounding_when_no_context(self) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        grounding_layer = MagicMock()
+        handler, _ = self._make_handler(fetch_return=NO_CONTEXT, grounding_layer=grounding_layer)
+
+        handler.handle(STATIC_PROMPT, llm)
+
+        grounding_layer.evaluate.assert_not_called()
+
+    def test_skips_grounding_when_no_grounding_layer(self) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        handler, _ = self._make_handler(fetch_return=CONTEXT, grounding_layer=None)
+
+        result = handler.handle(STATIC_PROMPT, llm)
+
+        assert result == ANSWER

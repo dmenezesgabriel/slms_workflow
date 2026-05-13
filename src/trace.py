@@ -3,29 +3,47 @@ from __future__ import annotations
 import os
 import sys
 import time
+import uuid
 from typing import Any
 
 _ENABLED = os.getenv("SLM_TRACE", "0") == "1"
+_request_id: str = ""
+_t0: float = 0.0
+_span_stack: list[str] = []
+
+
+def init() -> None:
+    global _request_id, _t0
+    _request_id = uuid.uuid4().hex[:12]
+    _t0 = time.monotonic()
+    _span_stack.clear()
 
 
 def _emit(event: str, **fields: Any) -> None:
     if not _ENABLED:
         return
+    elapsed = (time.monotonic() - _t0) * 1000
     parts = " ".join(f"{k}={v!r}" for k, v in fields.items())
-    print(f"[trace] {event} {parts}", file=sys.stderr, flush=True)
+    print(
+        f"[trace] {event} {parts} rid={_request_id} elapsed={elapsed:.1f}ms",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def span_enter(name: str) -> None:
+    _span_stack.append(name)
+    _emit("span.enter", name=name, depth=len(_span_stack))
+
+
+def span_exit(name: str) -> None:
+    if _span_stack and _span_stack[-1] == name:
+        _span_stack.pop()
+    _emit("span.exit", name=name, depth=len(_span_stack))
 
 
 def route(intent: str, confidence: float, reason: str) -> None:
     _emit("route", intent=intent, confidence=round(confidence, 4), reason=reason)
-
-
-def handler_start(intent: str) -> float:
-    _emit("handler.start", intent=intent)
-    return time.monotonic()
-
-
-def handler_end(intent: str, t0: float) -> None:
-    _emit("handler.end", intent=intent, elapsed_ms=round((time.monotonic() - t0) * 1000))
 
 
 def retrieval(source: str, query: str) -> None:
@@ -52,22 +70,48 @@ def agent_final(steps_taken: int) -> None:
     _emit("agent.final", steps=steps_taken)
 
 
-def workflow_step(workflow: str, step_n: int, intent: str, step_input: str) -> None:
-    _emit("workflow.step", workflow=workflow, n=step_n, intent=intent, input=step_input[:80])
-
-
-def dag_node(graph: str, node_id: str, intent: str, node_input: str) -> None:
-    _emit("dag.node", graph=graph, node=node_id, intent=intent, input=node_input[:80])
-
-
-def dag_skip(graph: str, node_id: str, condition: str) -> None:
-    _emit("dag.skip", graph=graph, node=node_id, condition=condition)
-
-
 def ner(text: str, entities: list[tuple[str, str]]) -> None:
     _emit("ner", text=text, entities=entities)
 
 
 def fast_path(kind: str, detail: str) -> None:
-    """Emitted when a deterministic shortcut bypasses the LLM."""
     _emit("fast_path", kind=kind, detail=detail[:80])
+
+
+def handler(intent: str, user_input: str) -> None:
+    _emit("handler", intent=intent, input=user_input[:80])
+
+
+def llm_request(model: str, max_tokens: int) -> None:
+    _emit("llm.request", model=model, max_tokens=max_tokens)
+
+
+def llm_response(model: str, success: bool, error: str | None = None) -> None:
+    if error:
+        _emit("llm.response", model=model, success=success, error=error[:80])
+    else:
+        _emit("llm.response", model=model, success=success)
+
+
+def grounding_check(check_name: str, passed: bool, score: float) -> None:
+    _emit("grounding.check", check=check_name, passed=passed, score=round(score, 4))
+
+
+def grounding_result(answer: str, route: str, score: float) -> None:
+    _emit("grounding.result", answer=answer[:60], route=route, score=round(score, 4))
+
+
+def plan_step(strategy: str, detail: str) -> None:
+    _emit("plan.step", strategy=strategy, detail=detail[:80])
+
+
+def composition(composed: bool, reason: str) -> None:
+    _emit("composition", composed=composed, reason=reason[:80])
+
+
+def dag_exec_node(node: str, intent: str) -> None:
+    _emit("dag.exec", node=node, intent=intent)
+
+
+def dag_skip_node(node: str, condition: str) -> None:
+    _emit("dag.skip", node=node, condition=condition)

@@ -10,7 +10,7 @@ def test_composes_math_follow_up_workflow() -> None:
 
     assert graph is not None
     assert graph.name == "on_demand_calculator_to_question_answering"
-    assert [node.intent for node in graph.nodes] == ["function_calling", "question_answering"]
+    assert [node.node.id for node in graph.nodes] == ["function_calling", "question_answering"]
     assert graph.nodes[0].input_format == "calculate 7 * 8"
 
 
@@ -20,7 +20,7 @@ def test_composes_research_summary_workflow_and_cleans_follow_up() -> None:
     assert graph is not None
     assert graph.name == "on_demand_web_search_to_summarization"
     assert graph.nodes[0].input_format == "search for llama.cpp"
-    assert graph.nodes[1].intent == "summarization"
+    assert graph.nodes[1].node.id == "summarization"
 
 
 def test_composes_on_demand_dag_for_default_planner() -> None:
@@ -33,11 +33,10 @@ def test_composes_on_demand_dag_for_default_planner() -> None:
     assert graph.nodes[1].input_format == "summarize: {tool}"
 
 
-def test_plan_uses_dag_for_compound_deterministic_tasks() -> None:
+def test_plan_returns_multi_node_dag_for_compound_tasks() -> None:
     plan = plan_assistant("search for llama.cpp and summarize the findings", MagicMock())
 
-    assert plan.strategy == "dag"
-    assert plan.graph is not None
+    assert len(plan.nodes) > 1
     assert plan.name == "on_demand_web_search_to_summarization"
 
 
@@ -47,13 +46,15 @@ def test_plain_math_stays_direct() -> None:
     assert workflow is None
 
 
-def test_entity_relation_question_stays_direct(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_entity_relation_returns_single_node_dag(
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
     expected = MagicMock(intent="question_answering", reason="mock route")
     route_task = MagicMock(return_value=expected)
-    monkeypatch.setattr("src.orchestrator.route_task", route_task)
+    monkeypatch.setattr("src.planner.route_task", route_task)
 
     plan = plan_assistant("what is the capital of France?", MagicMock())
 
-    assert plan.strategy == "direct"
-    assert plan.intent == "question_answering"
+    assert len(plan.nodes) == 1
+    assert plan.nodes[0].node.id == "question_answering"
     assert route_task.call_count == 1

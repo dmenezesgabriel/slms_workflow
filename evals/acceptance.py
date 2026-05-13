@@ -184,14 +184,16 @@ def _evaluate(
 
 
 def _run_case(case: AcceptanceCase) -> AcceptanceResult:
+    from src import trace as trace_module
     from src.context import extract_text
     from src.main import run
     from src.providers.openai_local import OpenAILocalClient
 
-    answer, trace, elapsed = _capture_run(
+    trace_module.init()
+    answer, trace_lines, elapsed = _capture_run(
         lambda: extract_text(run(case.prompt, OpenAILocalClient()))
     )
-    return _evaluate(case, answer, trace, elapsed)
+    return _evaluate(case, answer, trace_lines, elapsed)
 
 
 def _configure_models(args: argparse.Namespace) -> None:

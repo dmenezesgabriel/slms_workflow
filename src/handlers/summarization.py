@@ -4,6 +4,7 @@ import re
 
 from pydantic import BaseModel
 
+from src import trace
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
 from src.schemas import FinalAnswer, SummaryResult
@@ -19,11 +20,14 @@ class SummarizationHandler:
     intent = "summarization"
 
     def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        trace.handler("summarization", user_input)
+        trace.span_enter("summarization")
         text = _TRIGGER_PREFIX.sub("", user_input).strip()
         if len(text.split()) < _MIN_CONTENT_WORDS:
+            trace.span_exit("summarization")
             return FinalAnswer(answer="No text provided to summarize.")
         profile = MODEL_REGISTRY["summarization"]
-        return llm.structured(
+        result = llm.structured(
             LLMRequest(
                 model=profile.model,
                 system=profile.system,
@@ -33,6 +37,8 @@ class SummarizationHandler:
             ),
             SummaryResult,
         )
+        trace.span_exit("summarization")
+        return result
 
 
 _handler = SummarizationHandler()

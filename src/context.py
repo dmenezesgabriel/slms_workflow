@@ -1,96 +1,49 @@
 from __future__ import annotations
 
-import re
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Callable
 
-import numpy as np
 from pydantic import BaseModel
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
-_WHITESPACE = re.compile(r"\s+")
-_MIN_LEN = 20
-_MAX_LEN = 400
+CompressFn = Callable[[str, str], str]  # (text, query) -> compressed_str
+ExtractFn = Callable[[BaseModel], str]  # (result) -> text
+ConditionEvaluator = Callable[[str, str], bool]  # (condition_name, user_input) -> bool
 
 
-def _sentences(text: str) -> list[str]:
-    return [
-        s
-        for s in _SENTENCE_SPLIT.split(_WHITESPACE.sub(" ", text).strip())
-        if _MIN_LEN <= len(s) <= _MAX_LEN
-    ]
+@dataclass
+class ExecutionContext:
+    query: str
+    _compress: CompressFn = field(repr=False)
+    _extract: ExtractFn = field(repr=False)
+    outputs: dict[str, str] = field(default_factory=dict)
+    results: dict[str, BaseModel] = field(default_factory=dict)
+    _current: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._current = self.query
+
+    def record(self, node_id: str, result: BaseModel) -> None:
+        text = self._extract(result)
+        self.results[node_id] = result
+        self.outputs[node_id] = text
+        self._current = self._compress(text, self.query)
+
+    def render(self, input_format: str) -> str:
+        """Render a node input_format string with {query}, {input}, and {node_id} placeholders."""
+        values = _FormatValues({"query": self.query, "input": self._current})
+        values.update(self.outputs)
+        return input_format.format_map(values)
+
+    @property
+    def current(self) -> str:
+        return self._current
+
+    def last_result(self) -> BaseModel | None:
+        if not self.results:
+            return None
+        return next(reversed(self.results.values()))
 
 
-def compress(text: str, query: str, max_sentences: int = 6, max_chars: int | None = None) -> str:
-    """Return the most query-relevant sentences using TF-IDF cosine scoring.
-
-    Keeps sentence order so the compressed passage reads naturally.
-    Falls back to head-truncation when the corpus is too small to vectorize.
-    max_chars enforces a character budget (4 chars ≈ 1 token) after sentence selection.
-    """
-    sentences = _sentences(text)
-
-    if not sentences:
-        return text[:800]
-
-    if len(sentences) <= max_sentences:
-        result = " ".join(sentences)
-        return (
-            result
-            if max_chars is None
-            else _apply_char_budget(sentences, list(range(len(sentences))), max_chars)
-        )
-
-    try:
-        vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english", min_df=1)
-        matrix = vectorizer.fit_transform(sentences + [query])
-        scores = cosine_similarity(matrix[-1], matrix[:-1])[0]
-        top = sorted(np.argsort(scores)[-max_sentences:])
-        if max_chars is not None:
-            top = _apply_char_budget_indices(sentences, top, max_chars)
-        return " ".join(sentences[i] for i in top)
-    except ValueError:
-        top = list(range(min(max_sentences, len(sentences))))
-        if max_chars is not None:
-            top = _apply_char_budget_indices(sentences, top, max_chars)
-        return " ".join(sentences[i] for i in top)
-
-
-def _apply_char_budget(sentences: list[str], indices: list[int], max_chars: int) -> str:
-    return " ".join(sentences[i] for i in _apply_char_budget_indices(sentences, indices, max_chars))
-
-
-def _apply_char_budget_indices(
-    sentences: list[str], indices: list[int], max_chars: int
-) -> list[int]:
-    selected: list[int] = []
-    budget = max_chars
-    for i in indices:
-        cost = len(sentences[i]) + (1 if selected else 0)
-        if cost > budget:
-            continue
-        selected.append(i)
-        budget -= cost
-    return selected
-
-
-def extract_text(result: BaseModel) -> str:
-    """Pull useful user-facing text from any result schema.
-
-    Classification results need more than the raw label; returning the reason
-    too keeps workflow outputs interpretable and preserves topic/evidence terms
-    for downstream nodes and acceptance checks.
-    """
-    data: dict[str, Any] = result.model_dump()
-
-    label = data.get("label")
-    reason = data.get("reason")
-    if isinstance(label, str):
-        return f"{label}: {reason}" if isinstance(reason, str) and reason else label
-
-    for key in ("answer", "summary", "description"):
-        value = data.get(key)
-        if isinstance(value, str):
-            return value
-    return result.model_dump_json()
+class _FormatValues(dict[str, str]):
+    def __missing__(self, key: str) -> str:
+        return ""

@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 
 from src.schemas import ToolDecision, ToolName
+from src.techniques import ner
+from src.techniques.fuzzy import normalize_query
 from src.tools import TOOL_REGISTRY
 
 # ── Deterministic math extraction ──────────────────────────────────────────────
@@ -109,9 +111,6 @@ _LOOKUP_INTENT_RE = re.compile(
 
 
 def ner_tool(text: str) -> ToolDecision | None:
-    from src import ner
-    from src.fuzzy import normalize_query
-
     entities = ner.lookup_entities(text)
     if not entities:
         return None

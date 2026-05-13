@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from src import trace
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
 from src.patterns import IMAGE_REF_RE as _IMAGE_REF_PATTERN
@@ -43,18 +44,22 @@ class ImageUnderstandingHandler:
     intent = "image_understanding"
 
     def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
+        trace.handler("image_understanding", user_input)
+        trace.span_enter("image_understanding")
         image_path = _extract_image_path(user_input)
 
         if image_path is None:
+            trace.span_exit("image_understanding")
             return FinalAnswer(
                 answer="Image understanding detected but no image path found. Use @./image.png"
             )
 
         if not image_path.exists():
+            trace.span_exit("image_understanding")
             return FinalAnswer(answer=f"Image file not found: {image_path}")
 
         profile = MODEL_REGISTRY["image_understanding"]
-        return llm.structured(
+        result = llm.structured(
             LLMRequest(
                 model=profile.model,
                 system=profile.system
@@ -65,6 +70,8 @@ class ImageUnderstandingHandler:
             ),
             ImageDescription,
         )
+        trace.span_exit("image_understanding")
+        return result
 
 
 _handler = ImageUnderstandingHandler()

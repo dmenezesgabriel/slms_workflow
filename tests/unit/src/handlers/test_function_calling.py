@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src import tool_selection
 from src.handlers import function_calling
 from src.schemas import FinalAnswer, ToolDecision
 
@@ -60,7 +61,7 @@ class TestExtractMath:
     def test_returns_expression_when_text_contains_supported_math(
         self, text: str, expected_expression: str
     ) -> None:
-        result = function_calling._extract_math(text)
+        result = tool_selection.extract_math(text)
 
         assert result == expected_expression
 
@@ -74,7 +75,7 @@ class TestExtractMath:
         ],
     )
     def test_returns_none_when_text_has_no_math(self, text: str) -> None:
-        result = function_calling._extract_math(text)
+        result = tool_selection.extract_math(text)
 
         assert result is None
 
@@ -91,7 +92,7 @@ class TestDeterministicTool:
     def test_returns_tool_decision_when_text_matches_explicit_tool_pattern(
         self, text: str, expected_tool: str, expected_arguments: dict[str, str]
     ) -> None:
-        result = function_calling._deterministic_tool(text)
+        result = tool_selection.deterministic_tool(text)
 
         assert result is not None
         assert result.needs_tool is True
@@ -99,7 +100,7 @@ class TestDeterministicTool:
         assert result.arguments == expected_arguments
 
     def test_returns_none_when_text_does_not_match_explicit_tool_pattern(self) -> None:
-        result = function_calling._deterministic_tool(AMBIGUOUS_TEXT)
+        result = tool_selection.deterministic_tool(AMBIGUOUS_TEXT)
 
         assert result is None
 
@@ -111,12 +112,12 @@ class TestDeterministicDecision:
         extract_math = MagicMock(return_value=MATH_EXPRESSION)
         deterministic_tool = MagicMock()
         ner_tool = MagicMock()
-        monkeypatch.setattr(function_calling, "_extract_math", extract_math)
-        monkeypatch.setattr(function_calling, "_deterministic_tool", deterministic_tool)
-        monkeypatch.setattr(function_calling, "_ner_tool", ner_tool)
-        monkeypatch.setattr(function_calling, "TOOL_REGISTRY", {"calculator": object()})
+        monkeypatch.setattr(tool_selection, "extract_math", extract_math)
+        monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
+        monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
+        monkeypatch.setattr(tool_selection, "TOOL_REGISTRY", {"calculator": object()})
 
-        result = function_calling.deterministic_decision(MATH_TEXT)
+        result = tool_selection.deterministic_decision(MATH_TEXT)
 
         assert result is not None
         assert result.tool_name == "calculator"
@@ -132,11 +133,11 @@ class TestDeterministicDecision:
         extract_math = MagicMock(return_value=None)
         deterministic_tool = MagicMock(return_value=SEARCH_DECISION)
         ner_tool = MagicMock()
-        monkeypatch.setattr(function_calling, "_extract_math", extract_math)
-        monkeypatch.setattr(function_calling, "_deterministic_tool", deterministic_tool)
-        monkeypatch.setattr(function_calling, "_ner_tool", ner_tool)
+        monkeypatch.setattr(tool_selection, "extract_math", extract_math)
+        monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
+        monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
 
-        result = function_calling.deterministic_decision(SEARCH_TEXT)
+        result = tool_selection.deterministic_decision(SEARCH_TEXT)
 
         assert result == SEARCH_DECISION
         assert extract_math.call_count == 1
@@ -151,11 +152,11 @@ class TestDeterministicDecision:
         extract_math = MagicMock(return_value=None)
         deterministic_tool = MagicMock(return_value=None)
         ner_tool = MagicMock(return_value=WIKIPEDIA_DECISION)
-        monkeypatch.setattr(function_calling, "_extract_math", extract_math)
-        monkeypatch.setattr(function_calling, "_deterministic_tool", deterministic_tool)
-        monkeypatch.setattr(function_calling, "_ner_tool", ner_tool)
+        monkeypatch.setattr(tool_selection, "extract_math", extract_math)
+        monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
+        monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
 
-        result = function_calling.deterministic_decision(WIKIPEDIA_TEXT)
+        result = tool_selection.deterministic_decision(WIKIPEDIA_TEXT)
 
         assert result == WIKIPEDIA_DECISION
         assert extract_math.call_count == 1
@@ -171,11 +172,11 @@ class TestDeterministicDecision:
         extract_math = MagicMock(return_value=None)
         deterministic_tool = MagicMock(return_value=None)
         ner_tool = MagicMock(return_value=None)
-        monkeypatch.setattr(function_calling, "_extract_math", extract_math)
-        monkeypatch.setattr(function_calling, "_deterministic_tool", deterministic_tool)
-        monkeypatch.setattr(function_calling, "_ner_tool", ner_tool)
+        monkeypatch.setattr(tool_selection, "extract_math", extract_math)
+        monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
+        monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
 
-        result = function_calling.deterministic_decision(AMBIGUOUS_TEXT)
+        result = tool_selection.deterministic_decision(AMBIGUOUS_TEXT)
 
         assert result is None
         assert extract_math.call_count == 1
@@ -195,7 +196,7 @@ class TestHandle:
         dispatch = MagicMock(return_value=DISPATCHED_ANSWER)
         tool_decision_class = MagicMock(return_value=CALCULATOR_DECISION)
         fast_path = MagicMock()
-        monkeypatch.setattr(function_calling, "_extract_math", extract_math)
+        monkeypatch.setattr(tool_selection, "extract_math", extract_math)
         monkeypatch.setattr(function_calling, "_dispatch", dispatch)
         monkeypatch.setattr(function_calling, "ToolDecision", tool_decision_class)
         monkeypatch.setattr("src.handlers.function_calling.trace.fast_path", fast_path)
@@ -229,9 +230,9 @@ class TestHandle:
         ner_tool = MagicMock(return_value=None)
         llm_request = MagicMock()
         llm_request_class = MagicMock(return_value=llm_request)
-        monkeypatch.setattr(function_calling, "_extract_math", extract_math)
-        monkeypatch.setattr(function_calling, "_deterministic_tool", deterministic_tool)
-        monkeypatch.setattr(function_calling, "_ner_tool", ner_tool)
+        monkeypatch.setattr(tool_selection, "extract_math", extract_math)
+        monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
+        monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
         monkeypatch.setattr(function_calling, "LLMRequest", llm_request_class)
 
         result = function_calling.handle(AMBIGUOUS_TEXT, llm)

@@ -20,7 +20,7 @@ class AssertionPort:
 
     @staticmethod
     def is_answer_usable(answer: str) -> tuple[bool, str]:
-        from src.scoring import score_result
+        from src.techniques.scoring import score_result
 
         score = score_result(answer)
         return score.is_usable, score.reason

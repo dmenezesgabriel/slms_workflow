@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import re
-from typing import Protocol
 
-from src import context, ner, trace
-from src.patterns import PROPER_NOUN_RE as _PROPER_NOUN_RE
+from src import text_utils as context
+from src import trace
 from src.patterns import RECOMMENDATION_RE as _RECOMMENDATION_RE
 from src.patterns import RETRIEVAL_SIGNALS_RE as _RETRIEVAL_SIGNALS
 from src.patterns import URL_RE as _URL_PATTERN
-from src.patterns import WHAT_IS_RE as _WHAT_IS_RE
-from src.rag import store_retrieval_results
+from src.techniques import ner
+from src.techniques.retrieval import (
+    Retriever,
+    _concept_search_queries,
+    _is_successful_wikipedia_result,
+    _reference_search_queries,
+    extract_direct_what_is_entity,
+)
 from src.tools.base import Tool
 
 _REFERENCE_LOOKUP_RE = re.compile(
@@ -26,50 +31,7 @@ _CONCEPT_EXPLANATION_RE = re.compile(
     re.IGNORECASE,
 )
 _WORD_TOKENS_RE = re.compile(r"[A-Za-z0-9]+")
-_ACRONYM_RE = re.compile(r"\b(?:[A-Za-z]\.){2,}[A-Za-z]?\b|\b[A-Z]{3,}\b")
-_NON_ALPHA_RE = re.compile(r"[^A-Za-z]")
-
-_REFERENCE_STOPWORDS = {
-    "which",
-    "what",
-    "who",
-    "where",
-    "movie",
-    "film",
-    "book",
-    "song",
-    "quote",
-    "says",
-    "said",
-    "that",
-    "the",
-    "qual",
-    "filme",
-    "livro",
-    "frase",
-}
 _MAX_CONTEXT_SENTENCES = 6
-
-
-class Retriever(Protocol):
-    def fetch_context(self, user_input: str) -> str:
-        """Return compressed grounding context, or an empty string."""
-
-
-def needs_retrieval(text: str) -> bool:
-    return (
-        bool(_URL_PATTERN.search(text))
-        or _RETRIEVAL_SIGNALS.search(text) is not None
-        or ner.is_temporal(text)
-    )
-
-
-def extract_direct_what_is_entity(prompt: str) -> str | None:
-    wi_match = _WHAT_IS_RE.search(prompt)
-    if wi_match is None:
-        return None
-    match = _PROPER_NOUN_RE.search(prompt, wi_match.end())
-    return match.group(1) if match else None
 
 
 class DefaultRetriever:
@@ -83,7 +45,6 @@ class DefaultRetriever:
         if url_match:
             trace.retrieval("web_fetch", url_match.group())
             raw = self._web_fetch.execute({"url": url_match.group()})
-            store_retrieval_results([raw], ["web_fetch"])
             return context.compress(raw, query=user_input, max_sentences=_MAX_CONTEXT_SENTENCES)
 
         if _RETRIEVAL_SIGNALS.search(user_input):
@@ -161,8 +122,6 @@ class DefaultRetriever:
         queries = _reference_search_queries(user_input)
         parts: list[str] = []
 
-        # Numbers in reference queries often map to Wikipedia articles that name the
-        # cultural work (e.g. "42" → "42 (number)" which names Hitchhiker's Guide).
         numeric_clues = [
             t for t in _WORD_TOKENS_RE.findall(user_input) if t.isdigit() and len(t) >= 2
         ]
@@ -177,39 +136,13 @@ class DefaultRetriever:
         return context.compress(combined, query=user_input, max_sentences=8)
 
 
-def _concept_search_queries(user_input: str) -> list[str]:
-    queries = [user_input]
-    acronym_match = _ACRONYM_RE.search(user_input)
-    if acronym_match:
-        acronym = _NON_ALPHA_RE.sub("", acronym_match.group()).upper()
-        queries.append(f"{acronym} stands for principles")
-    return queries
+def create_default_retriever() -> Retriever:
+    from src.tools.web_fetch import WebFetch
+    from src.tools.web_search import WebSearch
+    from src.tools.wikipedia import Wikipedia
 
-
-def _reference_search_queries(user_input: str) -> list[str]:
-    clue_terms = [
-        token
-        for token in _WORD_TOKENS_RE.findall(user_input.lower())
-        if (len(token) > 2 or token.isdigit()) and token not in _REFERENCE_STOPWORDS
-    ]
-    clue_query = " ".join(clue_terms + ["quote", "source"])
-    queries = [user_input]
-    if clue_query and clue_query.lower() != user_input.lower():
-        queries.append(clue_query)
-    return queries
-
-
-def _is_successful_wikipedia_result(text: str) -> bool:
-    return "No Wikipedia article" not in text and "failed" not in text.lower()
-
-
-# Module-level singleton using concrete tool implementations
-from src.tools.web_fetch import WebFetch  # noqa: E402
-from src.tools.web_search import WebSearch  # noqa: E402
-from src.tools.wikipedia import Wikipedia  # noqa: E402
-
-DEFAULT_RETRIEVER: Retriever = DefaultRetriever(
-    web_fetch=WebFetch(),
-    web_search=WebSearch(),
-    wikipedia=Wikipedia(),
-)
+    return DefaultRetriever(
+        web_fetch=WebFetch(),
+        web_search=WebSearch(),
+        wikipedia=Wikipedia(),
+    )

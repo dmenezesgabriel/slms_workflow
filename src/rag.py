@@ -115,9 +115,15 @@ class LocalEmbeddingProvider:
 class ChromaVectorStore:
     """In-memory Chroma vector store for semantic search."""
 
-    def __init__(self, embedding_provider: EmbeddingProvider, decay_rate: float = 0.0) -> None:
+    def __init__(
+        self,
+        embedding_provider: EmbeddingProvider,
+        decay_rate: float = 0.0,
+        persist_path: str = "/tmp/chroma_rag",
+    ) -> None:
         self._embedding_provider = embedding_provider
         self._decay_rate = decay_rate
+        self._persist_path = persist_path
         self._chroma: Any = None
         self._collection: Any = None
         self._documents: dict[str, Document] = {}
@@ -129,7 +135,7 @@ class ChromaVectorStore:
             from chromadb.config import Settings as ChromaSettings
 
             self._chroma = chromadb.PersistentClient(
-                path="/tmp/chroma_rag",
+                path=self._persist_path,
                 settings=ChromaSettings(
                     anonymized_telemetry=False,
                     allow_reset=True,
@@ -285,6 +291,7 @@ class HybridRAG:
         rerank: bool = True,
         dedup_threshold: float = 0.85,
         decay_rate: float = 1e-5,
+        persist_path: str = "/tmp/chroma_rag",
     ) -> None:
         self._embedding_provider = LocalEmbeddingProvider(model_name=embedding_model, device=device)
         self._semantic_searcher: SemanticSearcher | None = None
@@ -295,6 +302,7 @@ class HybridRAG:
         self._semantic_weight = semantic_weight
         self._dedup_threshold = dedup_threshold
         self._decay_rate = decay_rate
+        self._persist_path = persist_path
         self._doc_count = 0
         self._initialized = False
 
@@ -303,7 +311,7 @@ class HybridRAG:
             return
 
         self._semantic_searcher = ChromaVectorStore(
-            self._embedding_provider, decay_rate=self._decay_rate
+            self._embedding_provider, decay_rate=self._decay_rate, persist_path=self._persist_path
         )
         self._keyword_searcher = BM25KeywordSearch()
         self._initialized = True
@@ -452,39 +460,28 @@ class SimpleInMemoryRAG:
         self._documents.clear()
 
 
-_global_rag: HybridRAG | None = None
+def create_default_rag(
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    rerank_model: str = DEFAULT_RERANK_MODEL,
+    device: str = "cpu",
+    semantic_weight: float = 0.5,
+    rerank: bool = True,
+    dedup_threshold: float = 0.85,
+    decay_rate: float = 1e-5,
+) -> HybridRAG:
+    return HybridRAG(
+        embedding_model=embedding_model,
+        rerank_model=rerank_model,
+        device=device,
+        semantic_weight=semantic_weight,
+        rerank=rerank,
+        dedup_threshold=dedup_threshold,
+        decay_rate=decay_rate,
+    )
 
 
-def get_rag() -> HybridRAG:
-    global _global_rag
-    if _global_rag is None:
-        _global_rag = HybridRAG(
-            embedding_model=DEFAULT_EMBEDDING_MODEL,
-            rerank_model=DEFAULT_RERANK_MODEL,
-            device="cpu",
-            semantic_weight=0.5,
-            rerank=True,
-            dedup_threshold=0.85,
-            decay_rate=1e-5,
-        )
-    return _global_rag
-
-
-def reset_rag() -> None:
-    global _global_rag
-    if _global_rag:
-        _global_rag.clear()
-    _global_rag = None
-
-
-def store_retrieval_results(contents: list[str], sources: list[str]) -> None:
-    rag = get_rag()
-    rag.add_text(contents=contents, sources=sources)
-
-
-def query_rag(query: str, top_k: int = 5) -> list[SearchResult]:
-    rag = get_rag()
-    return rag.search(query, top_k=top_k)
+def search_rag(store: HybridRAG, query: str, top_k: int = 5) -> list[SearchResult]:
+    return store.search(query, top_k=top_k)
 
 
 def rag_context_from_results(results: list[SearchResult]) -> str:

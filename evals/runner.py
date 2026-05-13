@@ -44,6 +44,7 @@ from evals.metrics import (
     pct,
     timed,
 )
+from src.dag import DagWorkflow
 from src.router import classify_ml
 from src.schemas import IntentClassification
 
@@ -173,30 +174,28 @@ def _eval_orchestration() -> OrchestrationMetrics:
         m.total += 1
         m.latencies_ms.append(elapsed)
 
-        strategy_ok = getattr(plan, "strategy") == expected_strategy
-        name_ok = getattr(plan, "name") == expected_name
+        name_ok = plan.name == expected_name
+        strategy_ok = _dag_strategy(plan) == expected_strategy
         if strategy_ok:
             m.strategy_correct += 1
         else:
             failures.append(
-                f"  STRAT {prompt!r} → got {getattr(plan, 'strategy')!r}, "
+                f"  STRAT {prompt!r} → got {_dag_strategy(plan)!r}, "
                 f"expected {expected_strategy!r}"
             )
         if strategy_ok and name_ok:
             m.plan_correct += 1
         else:
             failures.append(
-                f"  PLAN  {prompt!r} → got {getattr(plan, 'name')!r}, "
-                f"expected {expected_name!r}"
+                f"  PLAN  {prompt!r} → got {plan.name!r}, " f"expected {expected_name!r}"
             )
 
-        graph = getattr(plan, "graph", None)
         if expected_strategy == "dag":
             m.dag_total += 1
-            if graph is not None and _is_valid_graph(graph):
+            if _is_valid_graph(plan):
                 m.dag_valid += 1
             else:
-                failures.append(f"  DAG   {prompt!r} → invalid graph: {graph!r}")
+                failures.append(f"  DAG   {prompt!r} → invalid graph: {plan!r}")
 
     if failures:
         print("\n[orchestration failures]")
@@ -204,6 +203,14 @@ def _eval_orchestration() -> OrchestrationMetrics:
             print(f)
 
     return m
+
+
+def _dag_strategy(graph: DagWorkflow) -> str:
+    if len(graph.nodes) == 1 and graph.nodes[0].intent == "agent":
+        return "agent"
+    if len(graph.nodes) > 1:
+        return "dag"
+    return "direct"
 
 
 def _is_valid_graph(graph: object) -> bool:
@@ -222,7 +229,7 @@ def _is_valid_graph(graph: object) -> bool:
 
 def _eval_ner() -> NERMetrics | None:
     try:
-        from src import ner as ner_mod
+        from src.techniques import ner as ner_mod
     except ImportError:
         return None
 

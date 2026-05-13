@@ -3,11 +3,11 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from src import trace
-from src.context import compress, extract_text
-from src.handlers import HANDLER_REGISTRY
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
+from src.nodes.base import WorkflowNode
 from src.schemas import AgentStep, FinalAnswer, ToolDecision
+from src.text_utils import compress, extract_text
 from src.tool_selection import extract_math
 from src.tools import TOOL_ACTIONS, execute, execute_action, is_tool_action
 
@@ -17,10 +17,16 @@ _TOOL_ACTIONS = TOOL_ACTIONS
 
 
 class Agent:
-    def __init__(self, max_steps: int = 5) -> None:
+    def __init__(
+        self,
+        max_steps: int = 5,
+        action_nodes: dict[str, WorkflowNode] | None = None,
+    ) -> None:
         self._max_steps = max_steps
+        self._action_nodes = action_nodes or _default_action_nodes()
 
     def run(self, user_input: str, llm: LLMClient) -> BaseModel:
+        trace.handler("agent", user_input)
         from src.tools import TOOL_REGISTRY
 
         expression = extract_math(user_input)
@@ -81,7 +87,7 @@ class Agent:
         history: list[tuple[AgentStep, str]],
         llm: LLMClient,
     ) -> str:
-        from src.scoring import score_result
+        from src.techniques.scoring import score_result
 
         action = step.action
         inp = step.action_input
@@ -96,21 +102,15 @@ class Agent:
                 return r.result
             return f"Error: {r.error}"
 
-        prev = history[-1][1] if history else ""
-        ctx = compress(prev, query=inp, max_sentences=5) if prev else ""
-
-        if action == "summarize":
-            result = HANDLER_REGISTRY.dispatch("summarization", f"summarize:\n\n{ctx}", llm)
-            return extract_text(result)
-        if action == "classify":
-            result = HANDLER_REGISTRY.dispatch("classification", ctx, llm)
-            return extract_text(result)
-        if action == "answer":
-            query = f"{inp}\n\nContext: {ctx}" if ctx else inp
-            result = HANDLER_REGISTRY.dispatch("question_answering", query, llm)
+        node = self._action_nodes.get(action)
+        if node is not None:
+            prev = history[-1][1] if history else ""
+            ctx = compress(prev, query=inp, max_sentences=5) if prev else ""
+            node_input = _format_action_input(action, inp, ctx)
+            result = node.execute(node_input, llm)
             return extract_text(result)
 
-        return prev
+        return history[-1][1] if history else ""
 
     def _build_prompt(self, user_input: str, steps: list[tuple[AgentStep, str]]) -> str:
         lines = [f"Task: {user_input}"]
@@ -132,12 +132,42 @@ class Agent:
     def _force_answer(
         self, user_input: str, steps: list[tuple[AgentStep, str]], llm: LLMClient
     ) -> BaseModel:
-        ctx = compress(" ".join(r for _, r in steps), query=user_input, max_sentences=6)
-        result = HANDLER_REGISTRY.dispatch(
-            "question_answering", f"{user_input}\n\nContext: {ctx}", llm
-        )
-        return FinalAnswer(answer=extract_text(result))
+        node = self._action_nodes.get("answer")
+        if node is not None:
+            ctx = compress(" ".join(r for _, r in steps), query=user_input, max_sentences=6)
+            result = node.execute(f"{user_input}\n\nContext: {ctx}", llm)
+            return FinalAnswer(answer=extract_text(result))
+        return FinalAnswer(answer="")
 
 
-def run_agent(user_input: str, llm: LLMClient, max_steps: int = 5) -> BaseModel:
-    return Agent(max_steps=max_steps).run(user_input, llm)
+def _default_action_nodes() -> dict[str, WorkflowNode]:
+    from src.handlers import NODE_REGISTRY
+
+    def _req(key: str) -> WorkflowNode:
+        node = NODE_REGISTRY.get(key)
+        if node is None:
+            raise KeyError(f"Required node {key!r} not found in registry")
+        return node
+
+    return {
+        "summarize": _req("summarization"),
+        "classify": _req("classification"),
+        "answer": _req("question_answering"),
+    }
+
+
+def _format_action_input(action: str, inp: str, ctx: str) -> str:
+    if action == "summarize":
+        return f"summarize:\n\n{ctx}"
+    if action == "answer" and ctx:
+        return f"{inp}\n\nContext: {ctx}"
+    return inp
+
+
+def run_agent(
+    user_input: str,
+    llm: LLMClient,
+    max_steps: int = 5,
+    action_nodes: dict[str, WorkflowNode] | None = None,
+) -> BaseModel:
+    return Agent(max_steps=max_steps, action_nodes=action_nodes).run(user_input, llm)

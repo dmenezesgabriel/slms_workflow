@@ -6,13 +6,14 @@ import sys
 
 from pydantic import BaseModel
 
+from src import trace
 from src.agent import run_agent
-from src.context import extract_text
-from src.fuzzy import match_workflow
 from src.llm_client import LLMClient
 from src.model_registry import apply_model_overrides, ensure_model_available, known_model_aliases
 from src.orchestrator import Dispatch, run_assistant, run_direct
 from src.providers.openai_local import OpenAILocalClient
+from src.techniques.fuzzy import match_workflow
+from src.text_utils import extract_text
 from src.ui import AssistantUI, CommandHelp
 from src.workflow import WORKFLOW_REGISTRY, run_workflow
 
@@ -24,8 +25,12 @@ def run(
 ) -> BaseModel:
     """Unified public entrypoint used by CLI, tests, integrations, and chat."""
 
+    trace.init()
+    trace.span_enter("request")
     llm = llm or OpenAILocalClient()
-    return run_assistant(user_input, llm, conversation_context=conversation_context)
+    result = run_assistant(user_input, llm, conversation_context=conversation_context)
+    trace.span_exit("request")
+    return result
 
 
 def _print_result(result: BaseModel, as_json: bool, ui: AssistantUI | None = None) -> str:

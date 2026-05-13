@@ -13,7 +13,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
-from src.context import extract_text
+from src.text_utils import extract_text
 
 T = TypeVar("T")
 

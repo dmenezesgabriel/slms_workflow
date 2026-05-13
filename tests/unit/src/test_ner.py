@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src import ner
-from src.ner import Entity
+from src.techniques import ner
+from src.techniques.ner import Entity
 
 TEMPORAL_PROMPTS = [
     "What are the latest news about OpenAI?",
@@ -56,7 +56,7 @@ class TestExtract:
         extractor.extract.return_value = expected_entities
         trace_ner = MagicMock()
         monkeypatch.setattr(ner, "_extractor", extractor)
-        monkeypatch.setattr("src.ner.trace.ner", trace_ner)
+        monkeypatch.setattr("src.techniques.ner.trace.ner", trace_ner)
 
         result = ner.extract(text)
 
@@ -73,7 +73,7 @@ class TestExtract:
         extractor.extract.return_value = [entity]
         trace_ner = MagicMock()
         monkeypatch.setattr(ner, "_extractor", extractor)
-        monkeypatch.setattr("src.ner.trace.ner", trace_ner)
+        monkeypatch.setattr("src.techniques.ner.trace.ner", trace_ner)
 
         ner.extract(text)
 
@@ -88,7 +88,7 @@ class TestExtract:
         extractor.extract.return_value = []
         trace_ner = MagicMock()
         monkeypatch.setattr(ner, "_extractor", extractor)
-        monkeypatch.setattr("src.ner.trace.ner", trace_ner)
+        monkeypatch.setattr("src.techniques.ner.trace.ner", trace_ner)
 
         result = ner.extract(text)
 
@@ -124,3 +124,27 @@ class TestLookupEntities:
         assert result == []
         assert extract.call_count == 1
         extract.assert_called_once_with(text)
+
+
+class TestNERModule:
+    def test_canonical_imports_work(self) -> None:
+        from src.techniques.ner import Entity, EntityExtractor, extract, is_temporal
+
+        assert Entity is not None
+        assert EntityExtractor is not None
+        assert extract is not None
+        assert is_temporal is not None
+
+    def test_ner_monkeypatch_still_works(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from src.techniques.ner import _extractor
+
+        mock = MagicMock()
+        mock.extract.return_value = [Entity(text="test", label="TEST")]
+        monkeypatch.setattr(ner, "_extractor", mock)
+
+        result = ner.extract("test")
+        assert len(result) == 1
+        assert result[0].text == "test"
+
+        monkeypatch.undo()
+        assert ner._extractor is _extractor

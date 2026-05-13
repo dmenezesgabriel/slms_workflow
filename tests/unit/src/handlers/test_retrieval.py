@@ -4,7 +4,38 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src import retrieval
+from src.retrievers.default import DefaultRetriever
+from src.techniques.retrieval import extract_direct_what_is_entity
+
+
+class TestTechniquePurity:
+    def test_techniques_retrieval_does_not_import_tools(self) -> None:
+        import src.techniques.retrieval as r
+
+        source = r.__file__ if hasattr(r, "__file__") else ""
+        with open(source) as f:
+            content = f.read()
+        assert "src.tools" not in content
+
+    def test_techniques_retrieval_has_no_default_retriever(self) -> None:
+        from src.techniques import retrieval as r
+
+        assert not hasattr(r, "DefaultRetriever")
+
+    def test_techniques_retrieval_has_no_create_default_retriever(self) -> None:
+        from src.techniques import retrieval as r
+
+        assert not hasattr(r, "create_default_retriever")
+
+    def test_retrievers_default_exports_default_retriever(self) -> None:
+        from src.retrievers.default import DefaultRetriever
+
+        assert DefaultRetriever is not None
+
+    def test_retrievers_default_exports_create_default_retriever(self) -> None:
+        from src.retrievers.default import create_default_retriever
+
+        assert create_default_retriever is not None
 
 
 class TestProperNounFallback:
@@ -17,15 +48,15 @@ class TestProperNounFallback:
         ],
     )
     def test_extracts_only_direct_what_is_entities(self, prompt: str, expected: str | None) -> None:
-        assert retrieval.extract_direct_what_is_entity(prompt) == expected
+        assert extract_direct_what_is_entity(prompt) == expected
 
 
 def _make_retriever(
     web_fetch: object = None,
     web_search: object = None,
     wikipedia: object = None,
-) -> retrieval.DefaultRetriever:
-    return retrieval.DefaultRetriever(
+) -> DefaultRetriever:
+    return DefaultRetriever(
         web_fetch=web_fetch or MagicMock(),
         web_search=web_search or MagicMock(),
         wikipedia=wikipedia or MagicMock(),
@@ -37,7 +68,7 @@ class TestDefaultRetriever:
         mock_fetch = MagicMock()
         mock_fetch.execute.return_value = "page about testing"
         compress = MagicMock(return_value="compressed page")
-        monkeypatch.setattr("src.retrieval.context.compress", compress)
+        monkeypatch.setattr("src.retrievers.default.context.compress", compress)
 
         result = _make_retriever(web_fetch=mock_fetch).fetch_context("read https://example.com")
 
@@ -48,7 +79,9 @@ class TestDefaultRetriever:
     def test_returns_empty_context_when_no_retrieval_path_matches(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("src.retrieval.ner.lookup_entities", MagicMock(return_value=[]))
+        monkeypatch.setattr(
+            "src.retrievers.default.ner.lookup_entities", MagicMock(return_value=[])
+        )
 
         result = _make_retriever().fetch_context("hello there")
 
@@ -60,7 +93,7 @@ class TestDefaultRetriever:
         mock_search = MagicMock()
         mock_search.execute.return_value = "Title: Result\nSnippet: useful clue text"
         compress = MagicMock(return_value="compressed search context")
-        monkeypatch.setattr("src.retrieval.context.compress", compress)
+        monkeypatch.setattr("src.retrievers.default.context.compress", compress)
 
         prompt = "which song says hello from the other side?"
         result = _make_retriever(web_search=mock_search).fetch_context(prompt)
