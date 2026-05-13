@@ -401,9 +401,9 @@ class TestTechniqueDoesNotImportDAG:
         importlib.reload(src.techniques.fuzzy)
 
         after = set(CONDITION_REGISTRY.keys())
-        assert (
-            after == before
-        ), f"Importing src.techniques.fuzzy registered conditions: {after - before}"
+        assert after == before, (
+            f"Importing src.techniques.fuzzy registered conditions: {after - before}"
+        )
 
     def test_importing_techniques_retrieval_does_not_register_dag_conditions(
         self,
@@ -421,9 +421,9 @@ class TestTechniqueDoesNotImportDAG:
         after = set(CONDITION_REGISTRY.keys())
         newly_registered = after - before
 
-        assert (
-            "if_retrieval_needed" not in newly_registered
-        ), "Importing src.techniques.retrieval must not register DAG conditions"
+        assert "if_retrieval_needed" not in newly_registered, (
+            "Importing src.techniques.retrieval must not register DAG conditions"
+        )
         assert "if_not_retrieval_needed" not in newly_registered
 
 

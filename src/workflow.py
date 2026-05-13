@@ -40,9 +40,9 @@ WORKFLOW_REGISTRY = get_workflow_registry
 
 
 def _build_workflows() -> dict[str, DagWorkflow]:
-    assert (
-        _node_registry is not None
-    ), "set_node_registry() must be called before building workflows"
+    assert _node_registry is not None, (
+        "set_node_registry() must be called before building workflows"
+    )
     nr = _node_registry
 
     def _node(intent: str) -> WorkflowNode:

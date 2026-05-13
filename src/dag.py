@@ -141,7 +141,7 @@ def _condition_matches(
     fn = conditions.get(condition)
     if fn is None:
         raise ValueError(
-            f"Unknown DAG condition: {condition!r}. " f"Available conditions: {sorted(conditions)}"
+            f"Unknown DAG condition: {condition!r}. Available conditions: {sorted(conditions)}"
         )
     return fn(user_input)
 

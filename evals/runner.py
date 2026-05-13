@@ -138,8 +138,7 @@ def _eval_tools() -> ToolMetrics:
             m.arg_correct += 1
         else:
             failures.append(
-                f"  ARG   {prompt!r} → {arg_key}={arg_val!r}, "
-                f"expected to contain {arg_substring!r}"
+                f"  ARG   {prompt!r} → {arg_key}={arg_val!r}, expected to contain {arg_substring!r}"
             )
 
     if failures:
@@ -180,15 +179,12 @@ def _eval_orchestration() -> OrchestrationMetrics:
             m.strategy_correct += 1
         else:
             failures.append(
-                f"  STRAT {prompt!r} → got {_dag_strategy(plan)!r}, "
-                f"expected {expected_strategy!r}"
+                f"  STRAT {prompt!r} → got {_dag_strategy(plan)!r}, expected {expected_strategy!r}"
             )
         if strategy_ok and name_ok:
             m.plan_correct += 1
         else:
-            failures.append(
-                f"  PLAN  {prompt!r} → got {plan.name!r}, " f"expected {expected_name!r}"
-            )
+            failures.append(f"  PLAN  {prompt!r} → got {plan.name!r}, expected {expected_name!r}")
 
         if expected_strategy == "dag":
             m.dag_total += 1

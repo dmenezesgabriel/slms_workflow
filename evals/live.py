@@ -542,9 +542,9 @@ def _group_stats(results: list[Result]) -> tuple[int, int, int, float]:
 
 
 def _attribution_table(all_results: dict[str, list[Result]]) -> None:
-    print(f"\n{BOLD}{'─'*60}")
+    print(f"\n{BOLD}{'─' * 60}")
     print("ATTRIBUTION: which technique drove each result")
-    print(f"{'─'*60}{RESET}")
+    print(f"{'─' * 60}{RESET}")
 
     technique_hits: dict[str, int] = {
         "TF-IDF router (fast path)": 0,
@@ -576,17 +576,17 @@ def _attribution_table(all_results: dict[str, list[Result]]) -> None:
                 technique_hits["Result quality scorer"] += 1
 
     print(f"  {'Technique':<35} {'Queries':<10} {'Coverage'}")
-    print(f"  {'─'*35} {'─'*10} {'─'*10}")
+    print(f"  {'─' * 35} {'─' * 10} {'─' * 10}")
     for name, hits in technique_hits.items():
         bar = "█" * int(hits / max(total, 1) * 20)
-        print(f"  {name:<35} {hits:<10} {bar} {hits/total*100:.0f}%")
+        print(f"  {name:<35} {hits:<10} {bar} {hits / total * 100:.0f}%")
     print(f"\n  Total queries evaluated: {total}")
 
 
 def _pitfalls_summary(all_results: dict[str, list[Result]]) -> None:
-    print(f"\n{BOLD}{'─'*60}")
+    print(f"\n{BOLD}{'─' * 60}")
     print("PITFALLS & FINDINGS")
-    print(f"{'─'*60}{RESET}")
+    print(f"{'─' * 60}{RESET}")
 
     fails = [(g, r) for g, rs in all_results.items() for r in rs if "FAIL" in r.verdict()]
     warns = [(g, r) for g, rs in all_results.items() for r in rs if "WARN" in r.verdict()]
@@ -711,9 +711,9 @@ def main() -> None:
         if group_filter and group_filter != group_name:
             continue
 
-        print(f"\n{BOLD}{'═'*60}")
+        print(f"\n{BOLD}{'═' * 60}")
         print(f"  GROUP: {group_name.upper()}  ({len(cases)} cases)")
-        print(f"{'═'*60}{RESET}\n")
+        print(f"{'═' * 60}{RESET}\n")
 
         results = runner(cases)
         all_results[group_name] = results
@@ -726,7 +726,7 @@ def main() -> None:
         print(
             f"  {BOLD}Summary:{RESET} "
             f"{GREEN}PASS={p}{RESET}  {YELLOW}WARN={w}{RESET}  {RED}FAIL={f}{RESET}  "
-            f"avg={avg:.0f}ms  pass_rate={p/total*100:.0f}%"
+            f"avg={avg:.0f}ms  pass_rate={p / total * 100:.0f}%"
         )
 
     if not group_filter:
@@ -737,7 +737,7 @@ def main() -> None:
         total_all = sum(len(rs) for rs in all_results.values())
         print(
             f"\n{BOLD}OVERALL: {total_p}/{total_all} passed "
-            f"({total_p/total_all*100:.0f}%){RESET}\n"
+            f"({total_p / total_all * 100:.0f}%){RESET}\n"
         )
 
     if args.mlflow:

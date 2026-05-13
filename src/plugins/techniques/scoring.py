@@ -18,8 +18,7 @@ class ScoringPlugin:
         return PluginOutput(
             data={
                 "result": (
-                    f"quality={score.quality:.2f} "
-                    f"usable={score.is_usable} reason={score.reason}"
+                    f"quality={score.quality:.2f} usable={score.is_usable} reason={score.reason}"
                 ),
                 "quality": score.quality,
                 "is_usable": score.is_usable,
