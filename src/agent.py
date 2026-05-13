@@ -9,29 +9,28 @@ from src.nodes.base import WorkflowNode
 from src.schemas import AgentStep, FinalAnswer, ToolDecision
 from src.text_utils import compress, extract_text
 from src.tool_selection import extract_math
-from src.tools import TOOL_ACTIONS, execute, execute_action, is_tool_action
+from src.tools import ToolRegistry
 
 _MAX_CONTEXT_STEPS = 2
-
-_TOOL_ACTIONS = TOOL_ACTIONS
 
 
 class Agent:
     def __init__(
         self,
+        tool_registry: ToolRegistry,
         max_steps: int = 5,
         action_nodes: dict[str, WorkflowNode] | None = None,
     ) -> None:
         self._max_steps = max_steps
-        self._action_nodes = action_nodes or _default_action_nodes()
+        self._tool_registry = tool_registry
+        self._action_nodes = action_nodes or {}
 
     def run(self, user_input: str, llm: LLMClient) -> BaseModel:
         trace.handler("agent", user_input)
-        from src.tools import TOOL_REGISTRY
 
         expression = extract_math(user_input)
-        if expression is not None and "calculator" in TOOL_REGISTRY:
-            calc_result = execute(
+        if expression is not None and "calculator" in self._tool_registry:
+            calc_result = self._tool_registry.execute(
                 ToolDecision(
                     needs_tool=True,
                     tool_name="calculator",
@@ -68,8 +67,8 @@ class Agent:
                 trace.agent_final(step_n + 1)
                 return FinalAnswer(answer=step.action_input)
 
-            has_tool_results = any(is_tool_action(s.action) for s, _ in steps)
-            if has_tool_results and is_tool_action(step.action):
+            has_tool_results = any(self._tool_registry.is_action(s.action) for s, _ in steps)
+            if has_tool_results and self._tool_registry.is_action(step.action):
                 trace.agent_final(step_n + 1)
                 return self._force_answer(user_input, steps, llm)
 
@@ -92,7 +91,7 @@ class Agent:
         action = step.action
         inp = step.action_input
 
-        r = execute_action(action, inp)
+        r = self._tool_registry.execute_action(action, inp)
 
         if r is not None:
             if r.success:
@@ -121,7 +120,7 @@ class Agent:
                 truncated = result[:200] + "..." if len(result) > 200 else result
                 lines.append(f"  {i}. {step.action}({step.action_input!r}) → {truncated}")
 
-            if any(is_tool_action(s.action) for s, _ in steps):
+            if any(self._tool_registry.is_action(s.action) for s, _ in steps):
                 lines.append(
                     "\nYou have tool results. Use final_answer with your complete answer now."
                 )
@@ -140,22 +139,6 @@ class Agent:
         return FinalAnswer(answer="")
 
 
-def _default_action_nodes() -> dict[str, WorkflowNode]:
-    from src.handlers import NODE_REGISTRY
-
-    def _req(key: str) -> WorkflowNode:
-        node = NODE_REGISTRY.get(key)
-        if node is None:
-            raise KeyError(f"Required node {key!r} not found in registry")
-        return node
-
-    return {
-        "summarize": _req("summarization"),
-        "classify": _req("classification"),
-        "answer": _req("question_answering"),
-    }
-
-
 def _format_action_input(action: str, inp: str, ctx: str) -> str:
     if action == "summarize":
         return f"summarize:\n\n{ctx}"
@@ -167,7 +150,12 @@ def _format_action_input(action: str, inp: str, ctx: str) -> str:
 def run_agent(
     user_input: str,
     llm: LLMClient,
+    tool_registry: ToolRegistry,
     max_steps: int = 5,
     action_nodes: dict[str, WorkflowNode] | None = None,
 ) -> BaseModel:
-    return Agent(max_steps=max_steps, action_nodes=action_nodes).run(user_input, llm)
+    return Agent(
+        tool_registry=tool_registry,
+        max_steps=max_steps,
+        action_nodes=action_nodes,
+    ).run(user_input, llm)

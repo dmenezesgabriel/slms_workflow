@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from dataclasses import dataclass
-from typing import Callable
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Callable, Mapping
 
 from pydantic import BaseModel
 
@@ -17,17 +18,13 @@ from src.trace_types import ExecutionTrace, NodeTrace
 
 ConditionFn = Callable[[str], bool]
 
-CONDITION_REGISTRY: dict[str, ConditionFn] = {}
-
-
-def register_condition(name: str, fn: ConditionFn) -> None:
-    """Register a named condition predicate for use in DagNode.condition."""
-    CONDITION_REGISTRY[name] = fn
-
-
-register_condition("always", lambda _: True)
-register_condition("if_query_has_url", lambda text: bool(_URL_PATTERN.search(text)))
-register_condition("if_query_has_no_url", lambda text: not bool(_URL_PATTERN.search(text)))
+_DEFAULT_CONDITIONS: Mapping[str, ConditionFn] = MappingProxyType(
+    {
+        "always": lambda _: True,
+        "if_query_has_url": lambda text: bool(_URL_PATTERN.search(text)),
+        "if_query_has_no_url": lambda text: not bool(_URL_PATTERN.search(text)),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +50,7 @@ class DagWorkflow:
     description: str
     nodes: tuple[DagNode, ...]
     final_node: str | None = None
+    conditions: Mapping[str, ConditionFn] = field(default_factory=lambda: _DEFAULT_CONDITIONS)
 
 
 _MAX_NODE_INPUT_CHARS = 900
@@ -64,7 +62,7 @@ def run_dag_workflow(
     llm: LLMClient,
     compress_fn: CompressFn | None = None,
     extract_fn: ExtractFn | None = None,
-) -> tuple[BaseModel, ExecutionTrace]:
+) -> tuple[BaseModel | None, ExecutionTrace]:
     """Execute a deterministic DAG workflow and return (result, trace).
 
     Each node's WorkflowNode.execute is called with its rendered input.
@@ -87,7 +85,7 @@ def run_dag_workflow(
 
     for node_id in order:
         node = _node_by_id(graph, node_id)
-        if not _condition_matches(node.condition, user_input):
+        if not _condition_matches(node.condition, user_input, graph.conditions):
             trace.dag_skip_node(node_id, node.condition)
             continue
 
@@ -125,26 +123,25 @@ def run_dag_workflow(
     if last is not None:
         return last, exec_trace
 
-    from src.schemas import FinalAnswer  # local import — dag.py should not know domain schemas
-
-    return FinalAnswer(answer="No DAG node was executed for this request."), exec_trace
+    return None, exec_trace
 
 
 def _validate_dag(graph: DagWorkflow) -> None:
     for node in graph.nodes:
-        if node.condition not in CONDITION_REGISTRY:
+        if node.condition not in graph.conditions:
             raise ValueError(
                 f"Unknown DAG condition {node.condition!r} in {graph.name!r} node {node.id!r}. "
-                f"Registered: {sorted(CONDITION_REGISTRY)}"
+                f"Available: {sorted(graph.conditions)}"
             )
 
 
-def _condition_matches(condition: str, user_input: str) -> bool:
-    fn = CONDITION_REGISTRY.get(condition)
+def _condition_matches(
+    condition: str, user_input: str, conditions: Mapping[str, ConditionFn]
+) -> bool:
+    fn = conditions.get(condition)
     if fn is None:
         raise ValueError(
-            f"Unknown DAG condition: {condition!r}. "
-            f"Registered conditions: {sorted(CONDITION_REGISTRY)}"
+            f"Unknown DAG condition: {condition!r}. " f"Available conditions: {sorted(conditions)}"
         )
     return fn(user_input)
 

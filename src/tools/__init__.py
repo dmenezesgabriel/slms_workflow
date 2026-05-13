@@ -13,6 +13,17 @@ from src.tools.web_fetch import WebFetch
 from src.tools.web_search import WebSearch
 from src.tools.wikipedia import Wikipedia
 
+__all__ = [
+    "ToolResult",
+    "ToolRegistry",
+    "Calculator",
+    "DuckDBTool",
+    "PlaywrightTool",
+    "WebFetch",
+    "WebSearch",
+    "Wikipedia",
+]
+
 
 @dataclass(frozen=True)
 class ToolResult:
@@ -91,48 +102,7 @@ class ToolRegistry:
             )
 
     def execute_action(self, action: str, action_input: str) -> ToolResult | None:
-        decision = decision_for_action(action, action_input)
+        decision = self.decision_for_action(action, action_input)
         if decision is None:
             return None
-        return execute(decision)
-
-
-TOOL_REGISTRY = ToolRegistry(
-    [
-        Calculator(),
-        WebSearch(),
-        WebFetch(),
-        Wikipedia(),
-        PlaywrightTool(),
-        DuckDBTool(),
-    ]
-)
-
-# Module-level public API — callers and tests use these names directly.
-# execute_action deliberately calls the module-level execute so monkeypatching
-# src.tools.execute in tests also affects execute_action.
-
-TOOL_ACTIONS = frozenset(ToolRegistry._ACTION_ARGUMENTS)
-
-
-def execute(decision: ToolDecision) -> ToolResult:
-    return TOOL_REGISTRY.execute(decision)
-
-
-def execute_action(action: str, action_input: str) -> ToolResult | None:
-    decision = decision_for_action(action, action_input)
-    if decision is None:
-        return None
-    return execute(decision)
-
-
-def is_tool_action(action: str) -> bool:
-    return TOOL_REGISTRY.is_action(action)
-
-
-def tool_prompt() -> str:
-    return TOOL_REGISTRY.prompt()
-
-
-def decision_for_action(action: str, action_input: str) -> ToolDecision | None:
-    return TOOL_REGISTRY.decision_for_action(action, action_input)
+        return self.execute(decision)

@@ -605,54 +605,45 @@ class TestConcreteCalculatorPlugin:
 
 
 class TestPluginNodesInDefaultRegistry:
-    """Plugin nodes live in bootstrap.DEFAULT_REGISTRY, not in handlers.NODE_REGISTRY."""
+    """Plugin nodes live in the NodeRegistry built by build_node_registry."""
 
     def test_plugin_scoring_node_is_registered(self) -> None:
-        from src.bootstrap import DEFAULT_REGISTRY
+        from src.bootstrap import build_node_registry, build_tool_registry
 
-        node = DEFAULT_REGISTRY.get("plugin_scoring.default")
+        registry = build_node_registry(tool_registry=build_tool_registry())
+        node = registry.get("plugin_scoring.default")
         assert node is not None
         assert node.id == "plugin_scoring.default"
 
     def test_plugin_ner_node_is_registered(self) -> None:
-        from src.bootstrap import DEFAULT_REGISTRY
+        from src.bootstrap import build_node_registry, build_tool_registry
 
-        node = DEFAULT_REGISTRY.get("plugin_ner.default")
+        registry = build_node_registry(tool_registry=build_tool_registry())
+        node = registry.get("plugin_ner.default")
         assert node is not None
         assert node.id == "plugin_ner.default"
 
     def test_plugin_retrieval_node_is_registered(self) -> None:
-        from src.bootstrap import DEFAULT_REGISTRY
+        from src.bootstrap import build_node_registry, build_tool_registry
 
-        node = DEFAULT_REGISTRY.get("plugin_retrieval.default")
+        registry = build_node_registry(tool_registry=build_tool_registry())
+        node = registry.get("plugin_retrieval.default")
         assert node is not None
         assert node.id == "plugin_retrieval.default"
 
     def test_plugin_calculator_node_is_registered(self) -> None:
-        from src.bootstrap import DEFAULT_REGISTRY
+        from src.bootstrap import build_node_registry, build_tool_registry
 
-        node = DEFAULT_REGISTRY.get("plugin_tool.calculator")
+        registry = build_node_registry(tool_registry=build_tool_registry())
+        node = registry.get("plugin_tool.calculator")
         assert node is not None
         assert node.id == "plugin_tool.calculator"
 
-    def test_handlers_registry_does_not_contain_plugin_nodes(self) -> None:
-        """Plugin nodes belong to bootstrap, not handlers."""
-        from src.handlers import NODE_REGISTRY
+    def test_handlers_has_no_node_registry(self) -> None:
+        """Importing handlers does not create a NODE_REGISTRY."""
+        import src.handlers
 
-        assert NODE_REGISTRY.get("plugin_scoring.default") is None
-        assert NODE_REGISTRY.get("plugin_ner.default") is None
-        assert NODE_REGISTRY.get("plugin_retrieval.default") is None
-        assert NODE_REGISTRY.get("plugin_tool.calculator") is None
-
-    def test_handlers_registry_does_not_contain_retrieval(self) -> None:
-        from src.handlers import NODE_REGISTRY
-
-        assert NODE_REGISTRY.get("retrieval") is None
-
-    def test_handlers_registry_does_not_contain_grounding(self) -> None:
-        from src.handlers import NODE_REGISTRY
-
-        assert NODE_REGISTRY.get("grounding") is None
+        assert not hasattr(src.handlers, "NODE_REGISTRY")
 
 
 # ===================================================================
@@ -704,9 +695,11 @@ class TestHandlersNoPluginSideEffects:
 
 class TestPluginDemoWorkflow:
     def test_plugin_demo_workflow_exists_and_uses_plugin_nodes(self) -> None:
-        from src.workflow import WORKFLOW_REGISTRY
+        from src.bootstrap import build_node_registry, build_tool_registry
+        from src.workflow import get_workflow_registry, set_node_registry
 
-        wf = WORKFLOW_REGISTRY["plugin_demo"]
+        set_node_registry(build_node_registry(tool_registry=build_tool_registry()))
+        wf = get_workflow_registry()["plugin_demo"]
         node_ids = {n.id for n in wf.nodes}
         assert "extract" in node_ids
         assert "score" in node_ids
@@ -717,9 +710,11 @@ class TestPluginDemoWorkflow:
         assert score_node.node.id == "plugin_scoring.default"
 
     def test_plugin_demo_workflow_dag_validation(self) -> None:
-        from src.workflow import WORKFLOW_REGISTRY
+        from src.bootstrap import build_node_registry, build_tool_registry
+        from src.workflow import get_workflow_registry, set_node_registry
 
-        wf = WORKFLOW_REGISTRY["plugin_demo"]
+        set_node_registry(build_node_registry(tool_registry=build_tool_registry()))
+        wf = get_workflow_registry()["plugin_demo"]
         assert wf.final_node == "score"
 
     def test_plugin_node_executes_with_mock_in_dag(self) -> None:

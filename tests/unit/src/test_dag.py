@@ -76,7 +76,7 @@ def test_skips_branch_when_condition_does_not_match() -> None:
 
     result, trace = run_dag_workflow(graph, "no url here", MagicMock())
 
-    assert result == FinalAnswer(answer="No DAG node was executed for this request.")
+    assert result is None
     assert trace.nodes == {}
 
 
@@ -133,9 +133,9 @@ def test_rejects_unknown_condition() -> None:
 
 
 def test_custom_condition_is_respected() -> None:
-    from src.dag import CONDITION_REGISTRY, register_condition
-
-    register_condition("if_short_query", lambda text: len(text.split()) <= 3)
+    custom_conditions = {
+        "if_short_query": lambda text: len(text.split()) <= 3,
+    }
 
     calls: list[str] = []
 
@@ -150,6 +150,7 @@ def test_custom_condition_is_respected() -> None:
         name="custom_condition_test",
         description="test",
         nodes=(DagNode("a", _Node(), condition="if_short_query"),),
+        conditions=custom_conditions,
     )
 
     result, trace = run_dag_workflow(graph, "hi there", MagicMock())
@@ -159,8 +160,6 @@ def test_custom_condition_is_respected() -> None:
     calls.clear()
     result, trace = run_dag_workflow(graph, "this is a very long query", MagicMock())
     assert calls == []
-
-    del CONDITION_REGISTRY["if_short_query"]
 
 
 def test_rejects_cycles() -> None:

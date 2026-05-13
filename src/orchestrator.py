@@ -9,26 +9,35 @@ from pydantic import BaseModel
 from src import trace
 from src.composer import DAGComposer
 from src.dag import DagNode, DagWorkflow, run_dag_workflow
-from src.handlers import NODE_REGISTRY
 from src.llm_client import LLMClient
-from src.nodes.base import WorkflowNode
+from src.nodes.base import NodeRegistry, WorkflowNode
 from src.planner import Planner
 from src.router import route_task
 from src.schemas import IntentName
-
-
-def _node(intent: str) -> WorkflowNode:
-    node = NODE_REGISTRY.get(intent)
-    if node is None:
-        node = NODE_REGISTRY.get("general")
-    if node is None:
-        raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
-    return node
+from src.tools import ToolRegistry
 
 
 class Orchestrator:
-    def __init__(self) -> None:
-        self._planner = Planner()
+    def __init__(
+        self,
+        node_registry: NodeRegistry,
+        tool_registry: ToolRegistry,
+        planner: Planner | None = None,
+    ) -> None:
+        self.node_registry = node_registry
+        self.tool_registry = tool_registry
+        self._planner = planner or Planner(
+            node_registry=node_registry,
+            tool_registry=tool_registry,
+        )
+
+    def _node(self, intent: str) -> WorkflowNode:
+        node = self.node_registry.get(intent)
+        if node is None:
+            node = self.node_registry.get("general")
+        if node is None:
+            raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
+        return node
 
     def run(
         self,
@@ -47,6 +56,10 @@ class Orchestrator:
 
         result, _trace = run_dag_workflow(graph, dag_input, llm)
         trace.span_exit("orchestrate")
+        if result is None:
+            from src.schemas import FinalAnswer
+
+            return FinalAnswer(answer="No DAG node was executed for this request.")
         return result
 
     def plan(self, user_input: str, llm: LLMClient) -> DagWorkflow:
@@ -63,10 +76,14 @@ class Orchestrator:
         graph = DagWorkflow(
             name=intent,
             description=f"Direct dispatch to {intent}.",
-            nodes=(DagNode("final", _node(intent), "{query}"),),
+            nodes=(DagNode("final", self._node(intent), "{query}"),),
             final_node="final",
         )
         result, _trace = run_dag_workflow(graph, user_input, llm)
+        if result is None:
+            from src.schemas import FinalAnswer
+
+            return FinalAnswer(answer="No DAG node was executed for this request.")
         return result
 
     @staticmethod
@@ -74,40 +91,13 @@ class Orchestrator:
         return len(graph.nodes) == 1 and graph.nodes[0].node.id != "agent"
 
     def compose_dag(self, user_input: str) -> DagWorkflow | None:
-        return DAGComposer().compose(user_input)
+        return DAGComposer(
+            node_registry=self.node_registry,
+            tool_registry=self.tool_registry,
+        ).compose(user_input)
 
 
-_orchestrator = Orchestrator()
-
-
-def run_assistant(
-    user_input: str,
-    llm: LLMClient,
-    conversation_context: str | None = None,
-) -> BaseModel:
-    return _orchestrator.run(user_input, llm, conversation_context)
-
-
-def run_direct(user_input: str, llm: LLMClient) -> BaseModel:
-    return _orchestrator.run_direct(user_input, llm)
-
-
-def run_direct_with_intent(
-    user_input: str, llm: LLMClient, intent: IntentName | None = None
-) -> BaseModel:
-    return _orchestrator.run_direct_with_intent(user_input, llm, intent)
-
-
-def plan_assistant(user_input: str, llm: LLMClient) -> DagWorkflow:
-    return _orchestrator.plan(user_input, llm)
-
-
-def compose_dag_workflow(user_input: str) -> DagWorkflow | None:
-    return _orchestrator.compose_dag(user_input)
-
-
-def compose_workflow(user_input: str) -> DagWorkflow | None:
-    return compose_dag_workflow(user_input)
+Dispatch = Callable[[str, LLMClient], BaseModel]
 
 
 def _contextualize(
@@ -124,6 +114,3 @@ def _contextualize(
         f"{conversation_context}\n\n"
         f"Current user request: {user_input}"
     )
-
-
-Dispatch = Callable[[str, LLMClient], BaseModel]

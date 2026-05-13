@@ -5,25 +5,33 @@ from __future__ import annotations
 from src import trace
 from src.composer import DAGComposer, _looks_like_ambiguous_multi_tool_task
 from src.dag import DagNode, DagWorkflow
-from src.handlers import NODE_REGISTRY
 from src.llm_client import LLMClient
-from src.nodes.base import WorkflowNode
+from src.nodes.base import NodeRegistry, WorkflowNode
 from src.patterns import RECOMMENDATION_RE
 from src.router import route_task
-
-
-def _node(intent: str) -> WorkflowNode:
-    node = NODE_REGISTRY.get(intent)
-    if node is None:
-        node = NODE_REGISTRY.get("general")
-    if node is None:
-        raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
-    return node
+from src.tools import ToolRegistry
 
 
 class Planner:
-    def __init__(self, composer: DAGComposer | None = None) -> None:
-        self._composer = composer or DAGComposer()
+    def __init__(
+        self,
+        node_registry: NodeRegistry,
+        tool_registry: ToolRegistry,
+        composer: DAGComposer | None = None,
+    ) -> None:
+        self._node_registry = node_registry
+        self._composer = composer or DAGComposer(
+            node_registry=node_registry,
+            tool_registry=tool_registry,
+        )
+
+    def _node(self, intent: str) -> WorkflowNode:
+        node = self._node_registry.get(intent)
+        if node is None:
+            node = self._node_registry.get("general")
+        if node is None:
+            raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
+        return node
 
     def plan(self, user_input: str, llm: LLMClient) -> DagWorkflow:
         trace.span_enter("planning")
@@ -60,7 +68,7 @@ class Planner:
         return DagWorkflow(
             name=intent,
             description=description,
-            nodes=(DagNode("final", _node(intent), "{query}"),),
+            nodes=(DagNode("final", self._node(intent), "{query}"),),
             final_node="final",
         )
 
@@ -68,6 +76,6 @@ class Planner:
         return DagWorkflow(
             name="agent",
             description=description,
-            nodes=(DagNode("agent", _node("agent"), "{query}"),),
+            nodes=(DagNode("agent", self._node("agent"), "{query}"),),
             final_node="agent",
         )

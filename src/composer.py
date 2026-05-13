@@ -6,10 +6,10 @@ import re
 
 from src import trace
 from src.dag import DagNode, DagWorkflow
-from src.handlers import NODE_REGISTRY
+from src.nodes.base import NodeRegistry
 from src.schemas import ToolDecision
 from src.tool_selection import deterministic_tool, extract_math, ner_tool
-from src.tools import TOOL_REGISTRY
+from src.tools import ToolRegistry
 
 _SUMMARIZE_RE = re.compile(r"\b(summar(?:y|ize|ise)|tl;dr|resum[aoe])\b", re.IGNORECASE)
 _CLASSIFY_RE = re.compile(
@@ -46,6 +46,14 @@ _TOOL_OR_WORK_RE = re.compile(
 
 
 class DAGComposer:
+    def __init__(
+        self,
+        node_registry: NodeRegistry,
+        tool_registry: ToolRegistry,
+    ) -> None:
+        self._node_registry = node_registry
+        self._tool_registry = tool_registry
+
     def compose(self, user_input: str) -> DagWorkflow | None:
         """Return an on-demand DagWorkflow, or None if the input does not map to one."""
         decision = self._deterministic_decision(user_input)
@@ -67,8 +75,8 @@ class DAGComposer:
             trace.composition(False, f"no tool step input for {decision.tool_name}")
             return None
 
-        tool_node = NODE_REGISTRY.get("function_calling")
-        final_node = NODE_REGISTRY.get(processing_intent)
+        tool_node = self._node_registry.get("function_calling")
+        final_node = self._node_registry.get(processing_intent)
         if tool_node is None or final_node is None:
             trace.composition(False, "missing node(s) in registry")
             return None
@@ -92,7 +100,7 @@ class DAGComposer:
 
     def _deterministic_decision(self, user_input: str) -> ToolDecision | None:
         expression = extract_math(user_input)
-        if expression is not None and "calculator" in TOOL_REGISTRY:
+        if expression is not None and "calculator" in self._tool_registry:
             return ToolDecision(
                 needs_tool=True,
                 tool_name="calculator",
@@ -162,10 +170,3 @@ def _literal_format(text: str) -> str:
 
 def _looks_like_ambiguous_multi_tool_task(user_input: str) -> bool:
     return bool(_TOOL_OR_WORK_RE.search(user_input) and _FOLLOW_UP_RE.search(user_input))
-
-
-_composer = DAGComposer()
-
-
-def compose_dag(user_input: str) -> DagWorkflow | None:
-    return _composer.compose(user_input)

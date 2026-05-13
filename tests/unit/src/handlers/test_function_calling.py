@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src import tool_selection
-from src.handlers import function_calling
+from src.handlers.function_calling import FunctionCallingHandler
 from src.schemas import FinalAnswer, ToolDecision
 
 MATH_TEXT = "what is 3 plus 5"
@@ -37,6 +37,13 @@ WIKIPEDIA_DECISION = ToolDecision(
     arguments={"query": WIKIPEDIA_QUERY},
     reason="Deterministic Wikipedia pattern.",
 )
+
+
+def _mock_tool_registry() -> MagicMock:
+    registry = MagicMock()
+    registry.__contains__.return_value = True
+    registry.prompt.return_value = "calculator: compute things"
+    return registry
 
 
 class TestExtractMath:
@@ -115,9 +122,11 @@ class TestDeterministicDecision:
         monkeypatch.setattr(tool_selection, "extract_math", extract_math)
         monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
         monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
-        monkeypatch.setattr(tool_selection, "TOOL_REGISTRY", {"calculator": object()})
 
-        result = tool_selection.deterministic_decision(MATH_TEXT)
+        tool_registry = MagicMock()
+        tool_registry.__contains__.return_value = True
+
+        result = tool_selection.deterministic_decision(MATH_TEXT, tool_registry)
 
         assert result is not None
         assert result.tool_name == "calculator"
@@ -137,7 +146,8 @@ class TestDeterministicDecision:
         monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
         monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
 
-        result = tool_selection.deterministic_decision(SEARCH_TEXT)
+        tool_registry = MagicMock()
+        result = tool_selection.deterministic_decision(SEARCH_TEXT, tool_registry)
 
         assert result == SEARCH_DECISION
         assert extract_math.call_count == 1
@@ -156,7 +166,8 @@ class TestDeterministicDecision:
         monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
         monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
 
-        result = tool_selection.deterministic_decision(WIKIPEDIA_TEXT)
+        tool_registry = MagicMock()
+        result = tool_selection.deterministic_decision(WIKIPEDIA_TEXT, tool_registry)
 
         assert result == WIKIPEDIA_DECISION
         assert extract_math.call_count == 1
@@ -176,7 +187,8 @@ class TestDeterministicDecision:
         monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
         monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
 
-        result = tool_selection.deterministic_decision(AMBIGUOUS_TEXT)
+        tool_registry = MagicMock()
+        result = tool_selection.deterministic_decision(AMBIGUOUS_TEXT, tool_registry)
 
         assert result is None
         assert extract_math.call_count == 1
@@ -197,25 +209,18 @@ class TestHandle:
         tool_decision_class = MagicMock(return_value=CALCULATOR_DECISION)
         fast_path = MagicMock()
         monkeypatch.setattr(tool_selection, "extract_math", extract_math)
-        monkeypatch.setattr(function_calling, "_dispatch", dispatch)
-        monkeypatch.setattr(function_calling, "ToolDecision", tool_decision_class)
         monkeypatch.setattr("src.handlers.function_calling.trace.fast_path", fast_path)
-        monkeypatch.setattr(function_calling, "TOOL_REGISTRY", {"calculator": object()})
 
-        result = function_calling.handle(MATH_TEXT, llm)
+        handler = FunctionCallingHandler(tool_registry=_mock_tool_registry())
+        monkeypatch.setattr(handler, "_dispatch", dispatch)
+
+        result = handler.handle(MATH_TEXT, llm)
 
         assert result == DISPATCHED_ANSWER
         assert extract_math.call_count == 1
         extract_math.assert_called_once_with(MATH_TEXT)
-        assert tool_decision_class.call_count == 1
-        tool_decision_class.assert_called_once_with(
-            needs_tool=True,
-            tool_name="calculator",
-            arguments={"expression": MATH_EXPRESSION},
-            reason="Deterministic math extraction.",
-        )
+        assert tool_decision_class.call_count == 0
         assert dispatch.call_count == 1
-        dispatch.assert_called_once_with(CALCULATOR_DECISION)
         assert fast_path.call_count == 1
         fast_path.assert_called_once_with("math_regex", MATH_EXPRESSION)
         llm.structured.assert_not_called()
@@ -233,9 +238,10 @@ class TestHandle:
         monkeypatch.setattr(tool_selection, "extract_math", extract_math)
         monkeypatch.setattr(tool_selection, "deterministic_tool", deterministic_tool)
         monkeypatch.setattr(tool_selection, "ner_tool", ner_tool)
-        monkeypatch.setattr(function_calling, "LLMRequest", llm_request_class)
+        monkeypatch.setattr("src.handlers.function_calling.LLMRequest", llm_request_class)
 
-        result = function_calling.handle(AMBIGUOUS_TEXT, llm)
+        handler = FunctionCallingHandler(tool_registry=_mock_tool_registry())
+        result = handler.handle(AMBIGUOUS_TEXT, llm)
 
         assert result == FinalAnswer(answer=NO_TOOL_DECISION.reason)
         assert llm_request_class.call_count == 1

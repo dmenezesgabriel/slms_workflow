@@ -5,7 +5,7 @@ import re
 from src.schemas import ToolDecision, ToolName
 from src.techniques import ner
 from src.techniques.fuzzy import normalize_query
-from src.tools import TOOL_REGISTRY
+from src.tools import ToolRegistry
 
 # ── Deterministic math extraction ──────────────────────────────────────────────
 
@@ -129,10 +129,10 @@ def ner_tool(text: str) -> ToolDecision | None:
     )
 
 
-def deterministic_decision(user_input: str) -> ToolDecision | None:
+def deterministic_decision(user_input: str, tool_registry: ToolRegistry) -> ToolDecision | None:
     """Return a tool decision using deterministic paths only, without an LLM."""
     expression = extract_math(user_input)
-    if expression is not None and "calculator" in TOOL_REGISTRY:
+    if expression is not None and "calculator" in tool_registry:
         return ToolDecision(
             needs_tool=True,
             tool_name="calculator",

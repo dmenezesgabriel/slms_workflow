@@ -8,14 +8,26 @@ from pydantic import BaseModel
 
 from src import trace
 from src.agent import run_agent
+from src.bootstrap import build_node_registry, build_tool_registry
 from src.llm_client import LLMClient
 from src.model_registry import apply_model_overrides, ensure_model_available, known_model_aliases
-from src.orchestrator import Dispatch, run_assistant, run_direct
+from src.orchestrator import Dispatch, Orchestrator
 from src.providers.openai_local import OpenAILocalClient
 from src.techniques.fuzzy import match_workflow
 from src.text_utils import extract_text
 from src.ui import AssistantUI, CommandHelp
-from src.workflow import WORKFLOW_REGISTRY, run_workflow
+from src.workflow import get_workflow_registry, run_workflow, set_node_registry
+
+_orchestrator: Orchestrator | None = None
+
+
+def _get_orchestrator() -> Orchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        tool_registry = build_tool_registry()
+        node_registry = build_node_registry(tool_registry=tool_registry)
+        _orchestrator = Orchestrator(node_registry=node_registry, tool_registry=tool_registry)
+    return _orchestrator
 
 
 def run(
@@ -28,7 +40,7 @@ def run(
     trace.init()
     trace.span_enter("request")
     llm = llm or OpenAILocalClient()
-    result = run_assistant(user_input, llm, conversation_context=conversation_context)
+    result = _get_orchestrator().run(user_input, llm, conversation_context=conversation_context)
     trace.span_exit("request")
     return result
 
@@ -99,7 +111,7 @@ def _repl(
             ui.help(_help_commands())
             continue
         if user_input == "/workflows":
-            ui.workflows(WORKFLOW_REGISTRY)
+            ui.workflows(get_workflow_registry())
             continue
 
         context = _conversation_context(user_input, turns) if use_conversation else None
@@ -183,19 +195,39 @@ def _help_commands() -> list[CommandHelp]:
     ]
 
 
-def _select_dispatch(args: argparse.Namespace) -> Dispatch:
+def _select_dispatch(
+    args: argparse.Namespace, orchestrator: Orchestrator | None = None
+) -> Dispatch:
     if args.workflow:
-        resolved = match_workflow(args.workflow, WORKFLOW_REGISTRY)
-        selected = WORKFLOW_REGISTRY.get(resolved or "")
+        wf_registry = get_workflow_registry()
+        resolved = match_workflow(args.workflow, wf_registry)
+        selected = wf_registry.get(resolved or "")
         if selected is None:
             raise ValueError(
-                f"Unknown workflow: {args.workflow!r}. Available: {', '.join(WORKFLOW_REGISTRY)}"
+                f"Unknown workflow: {args.workflow!r}. Available: {', '.join(wf_registry)}"
             )
         return lambda inp, client: run_workflow(selected, inp, client)
     if args.agent:
-        return run_agent
+        assert orchestrator is not None
+        summarization = orchestrator.node_registry.get("summarization")
+        classification = orchestrator.node_registry.get("classification")
+        answer = orchestrator.node_registry.get("question_answering")
+        assert summarization is not None
+        assert classification is not None
+        assert answer is not None
+        return lambda inp, client: run_agent(
+            inp,
+            client,
+            tool_registry=orchestrator.tool_registry,
+            action_nodes={
+                "summarize": summarization,
+                "classify": classification,
+                "answer": answer,
+            },
+        )
     if args.direct:
-        return run_direct
+        assert orchestrator is not None
+        return lambda inp, client: orchestrator.run_direct(inp, client)
     return run
 
 
@@ -226,7 +258,10 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.list_workflows:
-        ui.workflows(WORKFLOW_REGISTRY)
+        tool_registry = build_tool_registry()
+        node_registry = build_node_registry(tool_registry=tool_registry)
+        set_node_registry(node_registry)
+        ui.workflows(get_workflow_registry())
         return
 
     try:
@@ -235,7 +270,14 @@ def main() -> None:
             default_model=args.model,
             role_models=_model_overrides_from_args(args),
         )
-        dispatch = _select_dispatch(args)
+        tool_registry = build_tool_registry()
+        node_registry = build_node_registry(tool_registry=tool_registry)
+        set_node_registry(node_registry)
+        orchestrator = Orchestrator(
+            node_registry=node_registry,
+            tool_registry=tool_registry,
+        )
+        dispatch = _select_dispatch(args, orchestrator)
     except (FileNotFoundError, ValueError) as exc:
         ui.error(str(exc))
         ui.info(f"Known auto-download aliases: {', '.join(known_model_aliases())}")
