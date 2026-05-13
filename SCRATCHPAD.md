@@ -88,7 +88,7 @@ except KeyboardInterrupt:
 - https://arxiv.org/abs/2211.01910
 - https://arxiv.org/abs/2305.03495
 - https://arxiv.org/abs/2309.08532
-
+- https://github.com/aurelio-labs/semantic-router
 --- 
 
 A good system for “prompt engineering semantic focus meta-analysis” could look like this:
