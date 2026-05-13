@@ -60,6 +60,10 @@ uv run python -m evals.acceptance --case gba_pokemon_first --mlflow
 uv run python -m evals.acceptance --case solid --mlflow
 uv run python -m evals.acceptance --all --mlflow
 
+# Mutation testing for unit-test-covered code only
+uv run mutmut run
+uv run mutmut results
+
 # Gherkin acceptance/integration scenarios against the local LLM server
 uv run behave features
 ```

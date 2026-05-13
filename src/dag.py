@@ -18,7 +18,7 @@ from src.trace_types import ExecutionTrace, NodeTrace
 
 ConditionFn = Callable[[str], bool]
 
-_DEFAULT_CONDITIONS: Mapping[str, ConditionFn] = MappingProxyType(
+CONDITION_REGISTRY: Mapping[str, ConditionFn] = MappingProxyType(
     {
         "always": lambda _: True,
         "if_query_has_url": lambda text: bool(_URL_PATTERN.search(text)),
@@ -50,7 +50,7 @@ class DagWorkflow:
     description: str
     nodes: tuple[DagNode, ...]
     final_node: str | None = None
-    conditions: Mapping[str, ConditionFn] = field(default_factory=lambda: _DEFAULT_CONDITIONS)
+    conditions: Mapping[str, ConditionFn] = field(default_factory=lambda: CONDITION_REGISTRY)
 
 
 _MAX_NODE_INPUT_CHARS = 900

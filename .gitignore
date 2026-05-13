@@ -14,3 +14,5 @@ models/*
 .flake8
 .coverage
 mlruns
+mutants/
+.mutmut-cache
