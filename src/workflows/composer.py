@@ -6,7 +6,7 @@ import re
 
 from src import trace
 from src.graph.base import NodeRegistry
-from src.graph.dag import DagNode, DagWorkflow
+from src.graph.dag import GraphNode, WorkflowGraph
 from src.schemas import ToolDecision
 from src.tool_selection import deterministic_tool, extract_math, ner_tool
 from src.tools import ToolRegistry
@@ -54,8 +54,8 @@ class DAGComposer:
         self._node_registry = node_registry
         self._tool_registry = tool_registry
 
-    def compose(self, user_input: str) -> DagWorkflow | None:
-        """Return an on-demand DagWorkflow, or None if the input does not map to one."""
+    def compose(self, user_input: str) -> WorkflowGraph | None:
+        """Return an on-demand WorkflowGraph, or None if the input does not map to one."""
         decision = self._deterministic_decision(user_input)
         if decision is None or not decision.needs_tool or decision.tool_name == "none":
             trace.composition(False, "no deterministic tool decision")
@@ -83,12 +83,12 @@ class DAGComposer:
 
         name = f"on_demand_{decision.tool_name}_to_{processing_intent}"
         trace.composition(True, name)
-        return DagWorkflow(
+        return WorkflowGraph(
             name=name,
             description="Composed from the user's prompt by the unified assistant.",
             nodes=(
-                DagNode("tool", tool_node, _literal_format(tool_input)),
-                DagNode(
+                GraphNode("tool", tool_node, _literal_format(tool_input)),
+                GraphNode(
                     "final",
                     final_node,
                     _processing_format(processing_intent, "tool"),

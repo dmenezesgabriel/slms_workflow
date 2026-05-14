@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.dag import DagNode, DagWorkflow, run_dag_workflow
+from src.dag import DagNode, DagWorkflow, GraphNode, WorkflowGraph, run_dag_workflow, run_graph
 from src.llm_client import LLMClient
 from src.schemas import FinalAnswer
 
@@ -17,6 +17,12 @@ def _make_node(node_id: str, intent: str = "general") -> object:
             return FinalAnswer(answer=f"{self.id}:{input}")
 
     return _Node()
+
+
+def test_new_runtime_names_are_available_as_aliases() -> None:
+    assert GraphNode is DagNode
+    assert WorkflowGraph is DagWorkflow
+    assert run_dag_workflow is not run_graph
 
 
 def test_runs_nodes_in_dependency_order() -> None:
@@ -46,7 +52,7 @@ def test_runs_nodes_in_dependency_order() -> None:
         final_node="b",
     )
 
-    result, trace = run_dag_workflow(graph, "question", MagicMock())
+    result, trace = run_graph(graph, "question", MagicMock())
 
     assert result == FinalAnswer(answer="final answer")
     assert calls == [

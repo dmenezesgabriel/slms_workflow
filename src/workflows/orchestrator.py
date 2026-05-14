@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from src import trace
 from src.graph.base import NodeRegistry, WorkflowNode
-from src.graph.dag import DagNode, DagWorkflow, run_dag_workflow
+from src.graph.dag import GraphNode, WorkflowGraph, run_graph
 from src.llm_client import LLMClient
 from src.router import route_task
 from src.schemas import IntentName
@@ -54,7 +54,7 @@ class Orchestrator:
             intent = graph.nodes[0].node.id
             dag_input = _contextualize(user_input, conversation_context, intent)
 
-        result, _trace = run_dag_workflow(graph, dag_input, llm)
+        result, _trace = run_graph(graph, dag_input, llm)
         trace.span_exit("orchestrate")
         if result is None:
             from src.schemas import FinalAnswer
@@ -62,7 +62,7 @@ class Orchestrator:
             return FinalAnswer(answer="No DAG node was executed for this request.")
         return result
 
-    def plan(self, user_input: str, llm: LLMClient) -> DagWorkflow:
+    def plan(self, user_input: str, llm: LLMClient) -> WorkflowGraph:
         return self._planner.plan(user_input, llm)
 
     def run_direct(self, user_input: str, llm: LLMClient) -> BaseModel:
@@ -73,13 +73,13 @@ class Orchestrator:
     ) -> BaseModel:
         if intent is None:
             return self.run_direct(user_input, llm)
-        graph = DagWorkflow(
+        graph = WorkflowGraph(
             name=intent,
             description=f"Direct dispatch to {intent}.",
-            nodes=(DagNode("final", self._node(intent), "{query}"),),
+            nodes=(GraphNode("final", self._node(intent), "{query}"),),
             final_node="final",
         )
-        result, _trace = run_dag_workflow(graph, user_input, llm)
+        result, _trace = run_graph(graph, user_input, llm)
         if result is None:
             from src.schemas import FinalAnswer
 
@@ -87,10 +87,10 @@ class Orchestrator:
         return result
 
     @staticmethod
-    def _is_simple(graph: DagWorkflow) -> bool:
+    def _is_simple(graph: WorkflowGraph) -> bool:
         return len(graph.nodes) == 1 and graph.nodes[0].node.id != "agent"
 
-    def compose_dag(self, user_input: str) -> DagWorkflow | None:
+    def compose_dag(self, user_input: str) -> WorkflowGraph | None:
         return DAGComposer(
             node_registry=self.node_registry,
             tool_registry=self.tool_registry,

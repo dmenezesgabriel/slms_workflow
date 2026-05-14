@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from src.graph.base import NodeRegistry, WorkflowNode
-from src.graph.dag import DagNode, DagWorkflow, run_dag_workflow
+from src.graph.dag import GraphNode, WorkflowGraph, run_graph
 from src.llm_client import LLMClient
 
-Workflow = DagWorkflow
+Workflow = WorkflowGraph
 
 
 @dataclass(frozen=True)
@@ -44,13 +44,13 @@ class _WorkflowCatalogState:
     """
 
     node_registry: NodeRegistry | None = None
-    workflow_registry: dict[str, DagWorkflow] | None = None
+    workflow_registry: dict[str, WorkflowGraph] | None = None
 
     def set_node_registry(self, registry: NodeRegistry) -> None:
         self.node_registry = registry
         self.workflow_registry = None
 
-    def get_workflow_registry(self) -> dict[str, DagWorkflow]:
+    def get_workflow_registry(self) -> dict[str, WorkflowGraph]:
         if self.workflow_registry is None:
             self.workflow_registry = _build_workflows(self.require_node_registry())
         return self.workflow_registry
@@ -68,7 +68,7 @@ def set_node_registry(registry: NodeRegistry) -> None:
     _STATE.set_node_registry(registry)
 
 
-def get_workflow_registry() -> dict[str, DagWorkflow]:
+def get_workflow_registry() -> dict[str, WorkflowGraph]:
     return _STATE.get_workflow_registry()
 
 
@@ -158,12 +158,12 @@ WORKFLOW_TEMPLATES: tuple[WorkflowTemplate, ...] = (
 )
 
 
-def _build_workflows(nr: NodeRegistry) -> dict[str, DagWorkflow]:
+def _build_workflows(nr: NodeRegistry) -> dict[str, WorkflowGraph]:
     return {template.name: _resolve_template(template, nr) for template in WORKFLOW_TEMPLATES}
 
 
-def _resolve_template(template: WorkflowTemplate, nr: NodeRegistry) -> DagWorkflow:
-    return DagWorkflow(
+def _resolve_template(template: WorkflowTemplate, nr: NodeRegistry) -> WorkflowGraph:
+    return WorkflowGraph(
         name=template.name,
         description=template.description,
         nodes=tuple(_resolve_template_node(node, nr) for node in template.nodes),
@@ -171,8 +171,8 @@ def _resolve_template(template: WorkflowTemplate, nr: NodeRegistry) -> DagWorkfl
     )
 
 
-def _resolve_template_node(node: WorkflowNodeTemplate, nr: NodeRegistry) -> DagNode:
-    return DagNode(
+def _resolve_template_node(node: WorkflowNodeTemplate, nr: NodeRegistry) -> GraphNode:
+    return GraphNode(
         id=node.id,
         node=_resolve_node(node.intent, nr),
         input_format=node.input_format,
@@ -188,14 +188,14 @@ def _resolve_node(intent: str, nr: NodeRegistry) -> WorkflowNode:
     return node
 
 
-def run_workflow(workflow: DagWorkflow, user_input: str, llm: LLMClient) -> BaseModel:
+def run_workflow(workflow: WorkflowGraph, user_input: str, llm: LLMClient) -> BaseModel:
     """Run a named workflow.
 
     This compatibility wrapper keeps the public CLI/eval/features API stable
     while using the DAG executor as the single workflow runtime.
     """
 
-    result, _trace = run_dag_workflow(workflow, user_input, llm)
+    result, _trace = run_graph(workflow, user_input, llm)
     if result is None:
         from src.schemas import FinalAnswer
 

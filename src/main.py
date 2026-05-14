@@ -124,7 +124,9 @@ def _repl(
             )
 
         result = (
-            execute() if as_json else ui.run_with_status("planning DAG/tools/model path…", execute)
+            execute()
+            if as_json
+            else ui.run_with_status("planning graph/tools/model path…", execute)
         )
         answer = _print_result(result, as_json, None if as_json else ui)
         if use_conversation:
@@ -172,7 +174,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agent", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--workflow", metavar="NAME", help=argparse.SUPPRESS)
     parser.add_argument(
-        "--list-workflows", action="store_true", help="List available workflows and exit"
+        "--list-workflows",
+        action="store_true",
+        help="List available predefined workflow graphs and exit",
     )
     return parser
 
@@ -188,8 +192,8 @@ def _help_commands() -> list[CommandHelp]:
             "--qa-model/--router-model/... ALIAS",
             "Override one specialist role while keeping the rest unchanged.",
         ),
-        CommandHelp("--list-workflows", "Inspect predefined DAG workflows."),
-        CommandHelp("/workflows", "Show DAG workflows inside interactive chat."),
+        CommandHelp("--list-workflows", "Inspect predefined workflow graphs."),
+        CommandHelp("/workflows", "Show workflow graphs inside interactive chat."),
         CommandHelp("/help", "Show this help inside interactive chat."),
         CommandHelp("/exit", "Leave interactive chat."),
     ]
@@ -298,7 +302,7 @@ def main() -> None:
         result = (
             execute()
             if args.json
-            else ui.run_with_status("planning DAG/tools/model path…", execute)
+            else ui.run_with_status("planning graph/tools/model path…", execute)
         )
         answer = _print_result(result, args.json, ui if rich_output else None)
         if not args.chat:

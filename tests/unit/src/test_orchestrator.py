@@ -3,27 +3,40 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import BaseModel
 
+from src.llm_client import LLMClient
 from src.nodes.base import NodeRegistry, WorkflowNode
+from src.orchestrator import Orchestrator
+from src.schemas import FinalAnswer
 from src.tools import ToolRegistry
+from src.tools.base import Tool
 
 
 def _make_node(node_id: str) -> WorkflowNode:
     class _Node:
         id = node_id
 
-        def execute(self, input: str, llm: MagicMock) -> MagicMock:  # type: ignore[override]
-            return MagicMock()
+        def execute(self, input: str, llm: LLMClient) -> BaseModel:
+            return FinalAnswer(answer=f"{node_id}:{input}")
 
     return _Node()
 
 
-def _make_tool(name: str) -> MagicMock:
-    tool = MagicMock()
-    tool.name = name
-    tool.prompt_line.return_value = f"{name}: does something"
-    tool.execute.return_value = ""
-    return tool
+def _make_tool(name: str) -> Tool:
+    class _Tool:
+        def __init__(self) -> None:
+            self.name = name
+            self.description = "does something"
+            self.parameters: dict[str, str] = {}
+
+        def prompt_line(self) -> str:
+            return f"{name}: does something"
+
+        def execute(self, args: dict[str, object]) -> str:
+            return ""
+
+    return _Tool()
 
 
 def _build_node_registry(*node_ids: str) -> NodeRegistry:
@@ -42,9 +55,7 @@ def _make_orchestrator(
         "general",
     ),
     tool_names: tuple[str, ...] = ("calculator", "web_search"),
-) -> object:
-    from src.orchestrator import Orchestrator
-
+) -> Orchestrator:
     return Orchestrator(
         node_registry=_build_node_registry(*node_ids),
         tool_registry=_build_tool_registry(*tool_names),

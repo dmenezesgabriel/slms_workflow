@@ -6,6 +6,7 @@ import pytest
 
 from src.retrievers.default import DefaultRetriever
 from src.techniques.retrieval import extract_direct_what_is_entity
+from src.tools.base import Tool
 
 
 class TestTechniquePurity:
@@ -51,15 +52,25 @@ class TestProperNounFallback:
         assert extract_direct_what_is_entity(prompt) == expected
 
 
+def _make_tool() -> Tool:
+    tool = MagicMock()
+    tool.name = "tool"
+    tool.description = "tool"
+    tool.parameters = {}
+    tool.prompt_line.return_value = "tool"
+    tool.execute.return_value = ""
+    return tool
+
+
 def _make_retriever(
-    web_fetch: object = None,
-    web_search: object = None,
-    wikipedia: object = None,
+    web_fetch: Tool | None = None,
+    web_search: Tool | None = None,
+    wikipedia: Tool | None = None,
 ) -> DefaultRetriever:
     return DefaultRetriever(
-        web_fetch=web_fetch or MagicMock(),
-        web_search=web_search or MagicMock(),
-        wikipedia=wikipedia or MagicMock(),
+        web_fetch=web_fetch or _make_tool(),
+        web_search=web_search or _make_tool(),
+        wikipedia=wikipedia or _make_tool(),
     )
 
 

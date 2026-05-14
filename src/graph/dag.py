@@ -28,7 +28,7 @@ CONDITION_REGISTRY: Mapping[str, ConditionFn] = MappingProxyType(
 
 
 @dataclass(frozen=True)
-class DagNode:
+class GraphNode:
     """One deterministic unit in an agentic workflow graph.
 
     node is the WorkflowNode to execute; input_format can reference:
@@ -45,19 +45,23 @@ class DagNode:
 
 
 @dataclass(frozen=True)
-class DagWorkflow:
+class WorkflowGraph:
     name: str
     description: str
-    nodes: tuple[DagNode, ...]
+    nodes: tuple[GraphNode, ...]
     final_node: str | None = None
     conditions: Mapping[str, ConditionFn] = field(default_factory=lambda: CONDITION_REGISTRY)
+
+
+DagNode = GraphNode
+DagWorkflow = WorkflowGraph
 
 
 _MAX_NODE_INPUT_CHARS = 900
 
 
-def run_dag_workflow(
-    graph: DagWorkflow,
+def run_graph(
+    graph: WorkflowGraph,
     user_input: str,
     llm: LLMClient,
     compress_fn: CompressFn | None = None,
@@ -126,7 +130,17 @@ def run_dag_workflow(
     return None, exec_trace
 
 
-def _validate_dag(graph: DagWorkflow) -> None:
+def run_dag_workflow(
+    graph: WorkflowGraph,
+    user_input: str,
+    llm: LLMClient,
+    compress_fn: CompressFn | None = None,
+    extract_fn: ExtractFn | None = None,
+) -> tuple[BaseModel | None, ExecutionTrace]:
+    return run_graph(graph, user_input, llm, compress_fn=compress_fn, extract_fn=extract_fn)
+
+
+def _validate_dag(graph: WorkflowGraph) -> None:
     for node in graph.nodes:
         if node.condition not in graph.conditions:
             raise ValueError(
@@ -146,14 +160,14 @@ def _condition_matches(
     return fn(user_input)
 
 
-def _node_by_id(graph: DagWorkflow, node_id: str) -> DagNode:
+def _node_by_id(graph: WorkflowGraph, node_id: str) -> GraphNode:
     for node in graph.nodes:
         if node.id == node_id:
             return node
     raise ValueError(f"Unknown DAG node {node_id!r} in {graph.name!r}")
 
 
-def _topological_order(graph: DagWorkflow) -> list[str]:
+def _topological_order(graph: WorkflowGraph) -> list[str]:
     nodes = {node.id: node for node in graph.nodes}
     if len(nodes) != len(graph.nodes):
         raise ValueError(f"DAG {graph.name!r} contains duplicate node ids")

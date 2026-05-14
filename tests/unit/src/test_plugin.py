@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.dag import DagNode, DagWorkflow, run_dag_workflow
+from src.graph.base import WorkflowNode
 from src.llm_client import LLMClient
 from src.plugins.contracts import PluginInput, PluginOutput, PluginSpec
 from src.plugins.registry import PluginRegistry
@@ -44,7 +45,7 @@ class FakePlugin:
         )
 
 
-def _make_node(node_id: str, intent: str = "general") -> object:
+def _make_node(node_id: str, intent: str = "general") -> WorkflowNode:
     class _Node:
         id = intent
 
@@ -52,6 +53,11 @@ def _make_node(node_id: str, intent: str = "general") -> object:
             return FinalAnswer(answer=f"{self.id}:{input}")
 
     return _Node()
+
+
+def _expect_final_answer(result: object) -> FinalAnswer:
+    assert isinstance(result, FinalAnswer)
+    return result
 
 
 # ===================================================================
@@ -202,9 +208,9 @@ class TestPluginNode:
         node = PluginNode("dynamic", registry)
 
         # Replace implementation at the registry level
-        registry._plugins["dynamic"] = SecondImpl()  # type: ignore[attr-defined]
+        registry._plugins["dynamic"] = SecondImpl()
 
-        result = node.execute("input", MagicMock())
+        result = _expect_final_answer(node.execute("input", MagicMock()))
         assert result.answer == "second_impl"
 
     def test_plugin_node_id_format(self) -> None:
@@ -228,8 +234,8 @@ class TestPluginNode:
 
         assert ner_node.id == "plugin_ner.default"
         assert score_node.id == "plugin_scoring.default"
-        assert ner_node.execute("input", MagicMock()).answer == "ENTITIES"
-        assert score_node.execute("input", MagicMock()).answer == "SCORE"
+        assert _expect_final_answer(ner_node.execute("input", MagicMock())).answer == "ENTITIES"
+        assert _expect_final_answer(score_node.execute("input", MagicMock())).answer == "SCORE"
 
 
 # ===================================================================
@@ -263,7 +269,8 @@ class TestPluginNodeInDAG:
         )
 
         result, trace = run_dag_workflow(graph, "hello", MagicMock())
-        assert result.answer == "plugin says hi"
+        final = _expect_final_answer(result)
+        assert final.answer == "plugin says hi"
         assert trace.nodes["second"].output == "plugin says hi"
 
     def test_dag_executes_plugin_node_without_knowing_plugin_type(self) -> None:
@@ -283,7 +290,7 @@ class TestPluginNodeInDAG:
         )
 
         result, trace = run_dag_workflow(graph, "test", MagicMock())
-        assert result.answer == "fake_result"
+        assert _expect_final_answer(result).answer == "fake_result"
 
     def test_replacing_plugin_produces_different_output_without_dag_change(
         self,
@@ -309,7 +316,7 @@ class TestPluginNodeInDAG:
         )
 
         result1, _ = run_dag_workflow(dag, "x", MagicMock())
-        assert result1.answer == "old_output"
+        assert _expect_final_answer(result1).answer == "old_output"
 
         class NewImpl:
             spec = PluginSpec(name="swappable", kind="test", version="2")
@@ -317,10 +324,10 @@ class TestPluginNodeInDAG:
             def execute(self, input: PluginInput) -> PluginOutput:
                 return PluginOutput(data={"result": "new_output"})
 
-        registry._plugins["swappable"] = NewImpl()  # type: ignore[attr-defined]
+        registry._plugins["swappable"] = NewImpl()
 
         result2, _ = run_dag_workflow(dag, "x", MagicMock())
-        assert result2.answer == "new_output"
+        assert _expect_final_answer(result2).answer == "new_output"
 
 
 # ===================================================================
@@ -448,7 +455,7 @@ class TestNoGlobalPluginRegistrySideEffects:
         # Check that the contracts are importable but no registry exists
         from src.plugins.contracts import PluginSpec
 
-        assert PluginSpec
+        assert PluginSpec is not None
 
 
 # ===================================================================
@@ -744,7 +751,7 @@ class TestPluginDemoWorkflow:
         )
 
         result, trace = run_dag_workflow(wf, "hello", MagicMock())
-        assert result.answer == "SCORE: ok"
+        assert _expect_final_answer(result).answer == "SCORE: ok"
         assert trace.nodes["extract"].output == "NER: OpenAI"
 
 
@@ -841,7 +848,7 @@ class TestCanonicalPaths:
 
         node = PluginNode("retrieval.default", registry)
 
-        result1 = node.execute("test", MagicMock())
+        result1 = _expect_final_answer(node.execute("test", MagicMock()))
         assert result1.answer == "fake_context"
 
         class NewFakeRetrieval:
@@ -855,9 +862,9 @@ class TestCanonicalPaths:
             def execute(self, input: PluginInput) -> PluginOutput:
                 return PluginOutput(data={"result": "new_fake_context"})
 
-        registry._plugins["retrieval.default"] = NewFakeRetrieval()  # type: ignore[attr-defined]
+        registry._plugins["retrieval.default"] = NewFakeRetrieval()
 
-        result2 = node.execute("test", MagicMock())
+        result2 = _expect_final_answer(node.execute("test", MagicMock()))
         assert result2.answer == "new_fake_context"
 
     def test_src_techniques_fuzzy_importable(self) -> None:

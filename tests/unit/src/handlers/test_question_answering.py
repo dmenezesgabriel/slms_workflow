@@ -4,9 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.handlers.question_answering import QuestionAnsweringHandler
+from src.handlers.question_answering import QuestionAnsweringHandler, RagStoreCallback
 from src.patterns import PROPER_NOUN_RE, WHAT_IS_RE
 from src.schemas import FinalAnswer
+from src.techniques.grounding import GroundingLayer
 from src.techniques.retrieval import needs_retrieval
 
 WHAT_IS_PROMPT = "What is spaCy?"
@@ -151,8 +152,8 @@ class TestHandle:
     def _make_handler(
         self,
         fetch_return: str = CONTEXT,
-        grounding_layer=None,
-        rag_store=None,
+        grounding_layer: GroundingLayer | None = None,
+        rag_store: RagStoreCallback | None = None,
     ) -> tuple[QuestionAnsweringHandler, MagicMock]:
         mock_retriever = MagicMock()
         mock_retriever.fetch_context.return_value = fetch_return

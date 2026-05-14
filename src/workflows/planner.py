@@ -1,4 +1,4 @@
-"""Composes a DagWorkflow for every user input — no strategy enum, always a DAG."""
+"""Composes a WorkflowGraph for every user input — no strategy enum, always a DAG."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import importlib
 
 from src import trace
 from src.graph.base import NodeRegistry, WorkflowNode
-from src.graph.dag import DagNode, DagWorkflow
+from src.graph.dag import GraphNode, WorkflowGraph
 from src.llm_client import LLMClient
 from src.tools import ToolRegistry
 from src.workflows.composer import DAGComposer, _looks_like_ambiguous_multi_tool_task
@@ -33,7 +33,7 @@ class Planner:
             raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
         return node
 
-    def plan(self, user_input: str, llm: LLMClient) -> DagWorkflow:
+    def plan(self, user_input: str, llm: LLMClient) -> WorkflowGraph:
         trace.span_enter("planning")
         stripped = user_input.strip()
         if not stripped:
@@ -65,18 +65,18 @@ class Planner:
         trace.span_exit("planning")
         return self._single(intent.intent, intent.reason)
 
-    def _single(self, intent: str, description: str) -> DagWorkflow:
-        return DagWorkflow(
+    def _single(self, intent: str, description: str) -> WorkflowGraph:
+        return WorkflowGraph(
             name=intent,
             description=description,
-            nodes=(DagNode("final", self._node(intent), "{query}"),),
+            nodes=(GraphNode("final", self._node(intent), "{query}"),),
             final_node="final",
         )
 
-    def _agent(self, description: str) -> DagWorkflow:
-        return DagWorkflow(
+    def _agent(self, description: str) -> WorkflowGraph:
+        return WorkflowGraph(
             name="agent",
             description=description,
-            nodes=(DagNode("agent", self._node("agent"), "{query}"),),
+            nodes=(GraphNode("agent", self._node("agent"), "{query}"),),
             final_node="agent",
         )

@@ -37,7 +37,7 @@ class AssistantUI:
     def header(self, mode: str) -> None:
         title = Text("SLM Assistant", style="bold cyan")
         subtitle = Text(
-            "one engine · deterministic DAGs · tools · small-model planner fallback",
+            "one engine · deterministic graphs · tools · small-model planner fallback",
             style="dim",
         )
         body = Align.center(Text.assemble(title, "\n", subtitle))
@@ -75,7 +75,7 @@ class AssistantUI:
             return fn()
 
     def workflows(self, workflows: Mapping[str, object]) -> None:
-        table = Table(title="Available DAG workflows", border_style="cyan")
+        table = Table(title="Available workflow graphs", border_style="cyan")
         table.add_column("name", style="bold")
         table.add_column("description")
         for name, entry in workflows.items():

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.dag import DagNode, DagWorkflow, run_dag_workflow
+from src.dag import DagNode, DagWorkflow, WorkflowGraph, run_dag_workflow
 from src.llm_client import LLMClient
 from src.schemas import FinalAnswer
 from src.workflow import get_workflow_registry, run_workflow, set_node_registry
@@ -22,6 +22,7 @@ def _registry() -> None:
 def test_predefined_workflows_are_dag_workflows(_registry: None) -> None:
     wf_registry = get_workflow_registry()
     assert wf_registry
+    assert all(isinstance(workflow, WorkflowGraph) for workflow in wf_registry.values())
     assert all(isinstance(workflow, DagWorkflow) for workflow in wf_registry.values())
     assert all(workflow.final_node is not None for workflow in wf_registry.values())
 
