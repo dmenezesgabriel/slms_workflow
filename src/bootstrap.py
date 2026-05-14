@@ -7,16 +7,21 @@ build_tool_registry() or build_node_registry() is called.
 
 from __future__ import annotations
 
+from typing import Mapping
+
 from src.graph.base import NodeRegistry
+from src.handlers.classification import ClassificationHandler
+from src.handlers.function_calling import FunctionCallingHandler
+from src.handlers.general import GeneralHandler
+from src.handlers.image_understanding import ImageUnderstandingHandler
+from src.handlers.summarization import SummarizationHandler
+from src.llm_client import LLMClient
+from src.model_registry import MODEL_REGISTRY, ModelProfile
 from src.nodes.agent_node import AgentNode
-from src.nodes.classification_node import ClassificationNode
-from src.nodes.function_calling_node import FunctionCallingNode
-from src.nodes.general_node import GeneralNode
-from src.nodes.image_understanding_node import ImageUnderstandingNode
 from src.nodes.plugin_node import PluginNode
 from src.nodes.question_answering_node import QuestionAnsweringNode
-from src.nodes.summarization_node import SummarizationNode
 from src.plugins.manifest import build_plugin_registry
+from src.providers.openai_local import OpenAILocalClient
 from src.rag import HybridRAG
 from src.retrievers.default import create_default_retriever
 from src.techniques.grounding import _DEFAULT_LAYER as grounding_layer
@@ -30,6 +35,10 @@ from src.tools import (
     WebSearch,
     Wikipedia,
 )
+
+
+def build_llm_client() -> LLMClient:
+    return OpenAILocalClient()
 
 
 def build_tool_registry() -> ToolRegistry:
@@ -48,24 +57,24 @@ def build_tool_registry() -> ToolRegistry:
 def build_node_registry(
     tool_registry: ToolRegistry | None = None,
     retriever: Retriever | None = None,
+    model_profiles: Mapping[str, ModelProfile] | None = None,
 ) -> NodeRegistry:
     tool_registry = tool_registry or build_tool_registry()
     retriever = retriever or create_default_retriever()
     assert tool_registry is not None
     assert retriever is not None
     plugin_registry = build_plugin_registry()
+    profiles = model_profiles or MODEL_REGISTRY
 
     rag_store = HybridRAG()
 
-    def store_retrieval_results(contents: list[str], sources: list[str]) -> None:
-        rag_store.add_text(contents=contents, sources=sources)
-
-    summarization_node = SummarizationNode()
-    classification_node = ClassificationNode()
+    summarization_node = SummarizationHandler(profile=profiles["summarization"])
+    classification_node = ClassificationHandler(profile=profiles["classification"])
     qa_node = QuestionAnsweringNode(
         retriever=retriever,
         grounding_layer=grounding_layer,
-        rag_store=store_retrieval_results,
+        rag_store=rag_store,
+        profile=profiles["question_answering"],
     )
 
     agent_node = AgentNode(
@@ -75,16 +84,20 @@ def build_node_registry(
             "classify": classification_node,
             "answer": qa_node,
         },
+        profile=profiles["agent"],
     )
 
     return NodeRegistry(
         [
             summarization_node,
             qa_node,
-            FunctionCallingNode(tool_registry=tool_registry),
+            FunctionCallingHandler(
+                tool_registry=tool_registry,
+                profile=profiles["function_calling"],
+            ),
             classification_node,
-            ImageUnderstandingNode(),
-            GeneralNode(),
+            ImageUnderstandingHandler(profile=profiles["image_understanding"]),
+            GeneralHandler(profile=profiles["general"]),
             agent_node,
             PluginNode("ner.default", plugin_registry),
             PluginNode("scoring.default", plugin_registry),

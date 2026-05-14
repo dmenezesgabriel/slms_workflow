@@ -247,24 +247,24 @@ def apply_model_overrides(
     *,
     default_model: str | None = None,
     role_models: Mapping[str, str | None] | None = None,
-) -> None:
-    """Override model aliases used by one or more specialist roles.
+) -> dict[str, ModelProfile]:
+    """Build a per-run model-profile mapping with optional overrides."""
 
-    This keeps experimentation cheap: the same deterministic harness can be run
-    with different local llama.cpp aliases without changing prompts or code.
-    """
+    registry = dict(MODEL_REGISTRY)
 
     if default_model:
-        for role, profile in list(MODEL_REGISTRY.items()):
+        for role, profile in list(registry.items()):
             if role != "image_understanding":
-                MODEL_REGISTRY[role] = replace(profile, model=default_model)
+                registry[role] = replace(profile, model=default_model)
 
     for role, model in (role_models or {}).items():
         if not model:
             continue
         normalized = _MODEL_ROLE_ALIASES.get(role, role)
-        if normalized not in MODEL_REGISTRY:
+        if normalized not in registry:
             raise ValueError(
                 f"Unknown model role {role!r}. Available roles: {', '.join(MODEL_REGISTRY)}"
             )
-        MODEL_REGISTRY[normalized] = replace(MODEL_REGISTRY[normalized], model=model)
+        registry[normalized] = replace(registry[normalized], model=model)
+
+    return registry

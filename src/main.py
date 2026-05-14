@@ -8,10 +8,10 @@ from pydantic import BaseModel
 
 from src import trace
 from src.agent import run_agent
-from src.bootstrap import build_node_registry, build_tool_registry
+from src.bootstrap import build_llm_client, build_node_registry, build_tool_registry
 from src.llm_client import LLMClient
 from src.model_registry import apply_model_overrides, ensure_model_available, known_model_aliases
-from src.providers.openai_local import OpenAILocalClient
+from src.router import Router
 from src.techniques.fuzzy import match_workflow
 from src.text_utils import extract_text
 from src.ui import AssistantUI, CommandHelp
@@ -39,7 +39,7 @@ def run(
 
     trace.init()
     trace.span_enter("request")
-    llm = llm or OpenAILocalClient()
+    llm = llm or build_llm_client()
     result = _get_orchestrator().run(user_input, llm, conversation_context=conversation_context)
     trace.span_exit("request")
     return result
@@ -219,6 +219,8 @@ def _select_dispatch(
         assert summarization is not None
         assert classification is not None
         assert answer is not None
+        agent_node = orchestrator.node_registry.get("agent")
+        agent_profile = getattr(agent_node, "_profile", None)
         return lambda inp, client: run_agent(
             inp,
             client,
@@ -228,6 +230,7 @@ def _select_dispatch(
                 "classify": classification,
                 "answer": answer,
             },
+            profile=agent_profile,
         )
     if args.direct:
         assert orchestrator is not None
@@ -270,16 +273,20 @@ def main() -> None:
 
     try:
         _ensure_requested_models(args)
-        apply_model_overrides(
+        model_profiles = apply_model_overrides(
             default_model=args.model,
             role_models=_model_overrides_from_args(args),
         )
         tool_registry = build_tool_registry()
-        node_registry = build_node_registry(tool_registry=tool_registry)
+        node_registry = build_node_registry(
+            tool_registry=tool_registry,
+            model_profiles=model_profiles,
+        )
         set_node_registry(node_registry)
         orchestrator = Orchestrator(
             node_registry=node_registry,
             tool_registry=tool_registry,
+            router=Router(profile=model_profiles["router"]),
         )
         dispatch = _select_dispatch(args, orchestrator)
     except (FileNotFoundError, ValueError) as exc:
@@ -287,7 +294,7 @@ def main() -> None:
         ui.info(f"Known auto-download aliases: {', '.join(known_model_aliases())}")
         sys.exit(1)
 
-    llm = OpenAILocalClient()
+    llm = build_llm_client()
     use_conversation = dispatch is run
     rich_output = not args.json
 

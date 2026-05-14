@@ -120,3 +120,32 @@ class TestDefaultRetriever:
             query=prompt,
             max_sentences=8,
         )
+
+    def test_programming_language_creator_prompt_uses_focused_web_search(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_search = MagicMock()
+        mock_search.execute.return_value = "Title: About Python\nSnippet: Guido van Rossum created Python and it was first released in 1991."
+        compress = MagicMock(return_value="compressed search context")
+        monkeypatch.setattr("src.retrievers.default.context.compress", compress)
+        monkeypatch.setattr(
+            "src.retrievers.default.ner.lookup_entities",
+            MagicMock(return_value=[MagicMock(text="Python", label="MISC")]),
+        )
+        monkeypatch.setattr("src.retrievers.default.ner.is_temporal", MagicMock(return_value=False))
+
+        prompt = "Who created the Python programming language and when was it first released?"
+        result = _make_retriever(web_search=mock_search).fetch_context(prompt)
+
+        assert result == "compressed search context"
+        mock_search.execute.assert_called_once_with(
+            {
+                "query": "Python programming language first released Guido van Rossum",
+                "max_results": 3,
+            }
+        )
+        compress.assert_called_once_with(
+            "Title: About Python\nSnippet: Guido van Rossum created Python and it was first released in 1991.",
+            query=prompt,
+            max_sentences=6,
+        )

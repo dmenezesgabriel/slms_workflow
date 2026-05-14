@@ -17,3 +17,6 @@ mlruns
 mutants/
 .mutmut-cache
 *.log
+
+context.md
+false

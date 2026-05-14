@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.handlers.question_answering import QuestionAnsweringHandler, RagStoreCallback
+from src.handlers.question_answering import QuestionAnsweringHandler, QuestionAnsweringResult
 from src.patterns import PROPER_NOUN_RE, WHAT_IS_RE
 from src.schemas import FinalAnswer
 from src.techniques.grounding import GroundingLayer
@@ -15,6 +15,7 @@ PROPER_NOUN = "spaCy"
 PROPER_NOUN_GROUP = 1
 TEMPORAL_PROMPT = "what is happening now in AI?"
 STATIC_PROMPT = "what is Python"
+HISTORICAL_PROMPT = "Who created the Python programming language and when was it first released?"
 URL_PROMPT = "fetch https://example.com"
 RETRIEVAL_SIGNAL_PROMPT = "current Python version"
 ANSWER = FinalAnswer(answer="answer")
@@ -147,20 +148,30 @@ class TestNeedsRetrieval:
         assert is_temporal.call_count == 1
         is_temporal.assert_called_once_with(STATIC_PROMPT)
 
+    def test_returns_false_for_historical_release_question(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        is_temporal = MagicMock(return_value=False)
+        monkeypatch.setattr("src.techniques.ner.is_temporal", is_temporal)
+
+        result = needs_retrieval(HISTORICAL_PROMPT)
+
+        assert result is False
+        assert is_temporal.call_count == 1
+        is_temporal.assert_called_once_with(HISTORICAL_PROMPT)
+
 
 class TestHandle:
     def _make_handler(
         self,
         fetch_return: str = CONTEXT,
         grounding_layer: GroundingLayer | None = None,
-        rag_store: RagStoreCallback | None = None,
     ) -> tuple[QuestionAnsweringHandler, MagicMock]:
         mock_retriever = MagicMock()
         mock_retriever.fetch_context.return_value = fetch_return
         handler = QuestionAnsweringHandler(
             retriever=mock_retriever,
             grounding_layer=grounding_layer,
-            rag_store=rag_store,
         )
         return handler, mock_retriever
 
@@ -175,7 +186,7 @@ class TestHandle:
 
         result = handler.handle(STATIC_PROMPT, llm)
 
-        assert result == ANSWER
+        assert result == QuestionAnsweringResult(response=ANSWER, retrieved_context=CONTEXT)
         mock_retriever.fetch_context.assert_called_once_with(STATIC_PROMPT)
         assert llm_request_class.call_count == 1
         llm.structured.assert_called_once_with(LLM_REQUEST, FinalAnswer)
@@ -193,31 +204,11 @@ class TestHandle:
 
         result = handler.handle(STATIC_PROMPT, llm)
 
-        assert result == ANSWER
+        assert result == QuestionAnsweringResult(response=ANSWER, retrieved_context=NO_CONTEXT)
         mock_retriever.fetch_context.assert_called_once_with(STATIC_PROMPT)
         assert llm_request_class.call_count == 1
         assert llm_request_class.call_args.kwargs["user"] == STATIC_PROMPT
         llm.structured.assert_called_once_with(LLM_REQUEST, FinalAnswer)
-
-    def test_calls_rag_store_when_context_exists_and_not_math(self) -> None:
-        llm = MagicMock()
-        llm.structured.return_value = ANSWER
-        rag_store = MagicMock()
-        handler, _ = self._make_handler(fetch_return=CONTEXT, rag_store=rag_store)
-
-        handler.handle(STATIC_PROMPT, llm)
-
-        rag_store.assert_called_once_with([CONTEXT], ["retrieval_cache"])
-
-    def test_skips_rag_store_when_no_context(self) -> None:
-        llm = MagicMock()
-        llm.structured.return_value = ANSWER
-        rag_store = MagicMock()
-        handler, _ = self._make_handler(fetch_return=NO_CONTEXT, rag_store=rag_store)
-
-        handler.handle(STATIC_PROMPT, llm)
-
-        rag_store.assert_not_called()
 
     def test_applies_grounding_when_context_exists(self) -> None:
         llm = MagicMock()
@@ -229,8 +220,10 @@ class TestHandle:
         result = handler.handle(STATIC_PROMPT, llm)
 
         grounding_layer.evaluate.assert_called_once_with(ANSWER.answer, CONTEXT)
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "grounded answer"
+        assert result == QuestionAnsweringResult(
+            response=FinalAnswer(answer="grounded answer"),
+            retrieved_context=CONTEXT,
+        )
 
     def test_skips_grounding_when_no_context(self) -> None:
         llm = MagicMock()
@@ -249,4 +242,4 @@ class TestHandle:
 
         result = handler.handle(STATIC_PROMPT, llm)
 
-        assert result == ANSWER
+        assert result == QuestionAnsweringResult(response=ANSWER, retrieved_context=CONTEXT)

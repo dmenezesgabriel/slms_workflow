@@ -21,6 +21,14 @@ class NodeRegistry:
     def get(self, node_id: str) -> WorkflowNode | None:
         return self._nodes.get(node_id)
 
+    def resolve(self, node_id: str) -> WorkflowNode:
+        node = self.get(node_id)
+        if node is None:
+            node = self._fallback
+        if node is None:
+            raise KeyError(f"Node registry misconfigured: no {node_id!r} and no 'general' fallback")
+        return node
+
     def all(self) -> list[WorkflowNode]:
         """Return all registered workflow nodes (for registry composition)."""
         return list(self._nodes.values())

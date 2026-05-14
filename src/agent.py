@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from src import trace
 from src.graph.base import WorkflowNode
 from src.llm_client import LLMClient, LLMRequest
-from src.model_registry import MODEL_REGISTRY
+from src.model_registry import MODEL_REGISTRY, ModelProfile
 from src.schemas import AgentStep, FinalAnswer, ToolDecision
 from src.text_utils import compress, extract_text
 from src.tool_selection import extract_math
@@ -20,10 +20,12 @@ class Agent:
         tool_registry: ToolRegistry,
         max_steps: int = 5,
         action_nodes: dict[str, WorkflowNode] | None = None,
+        profile: ModelProfile | None = None,
     ) -> None:
         self._max_steps = max_steps
         self._tool_registry = tool_registry
         self._action_nodes = action_nodes or {}
+        self._profile = profile or MODEL_REGISTRY["agent"]
 
     def run(self, user_input: str, llm: LLMClient) -> BaseModel:
         trace.handler("agent", user_input)
@@ -48,16 +50,15 @@ class Agent:
                 return self._force_answer(user_input, [(seed, calc_result.result)], llm)
 
         steps: list[tuple[AgentStep, str]] = []
-        profile = MODEL_REGISTRY["agent"]
 
         for step_n in range(self._max_steps):
             step = llm.structured(
                 LLMRequest(
-                    model=profile.model,
-                    system=profile.system,
+                    model=self._profile.model,
+                    system=self._profile.system,
                     user=self._build_prompt(user_input, steps),
-                    max_tokens=profile.max_tokens,
-                    temperature=profile.temperature,
+                    max_tokens=self._profile.max_tokens,
+                    temperature=self._profile.temperature,
                 ),
                 AgentStep,
             )
@@ -153,9 +154,11 @@ def run_agent(
     tool_registry: ToolRegistry,
     max_steps: int = 5,
     action_nodes: dict[str, WorkflowNode] | None = None,
+    profile: ModelProfile | None = None,
 ) -> BaseModel:
     return Agent(
         tool_registry=tool_registry,
         max_steps=max_steps,
         action_nodes=action_nodes,
+        profile=profile,
     ).run(user_input, llm)

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from src import trace
 from src.llm_client import LLMClient, LLMRequest
-from src.model_registry import MODEL_REGISTRY
+from src.model_registry import MODEL_REGISTRY, ModelProfile
 from src.patterns import IMAGE_REF_RE as _IMAGE_REF_PATTERN
 from src.schemas import FinalAnswer, ImageDescription
 
@@ -41,7 +41,14 @@ def _build_user_content(user_input: str, image_path: Path) -> list[dict[str, Any
 
 
 class ImageUnderstandingHandler:
-    intent = "image_understanding"
+    id = "image_understanding"
+    intent = id
+
+    def __init__(self, profile: ModelProfile | None = None) -> None:
+        self._profile = profile or MODEL_REGISTRY["image_understanding"]
+
+    def execute(self, input: str, llm: LLMClient) -> BaseModel:
+        return self.handle(input, llm)
 
     def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
         trace.handler("image_understanding", user_input)
@@ -58,15 +65,14 @@ class ImageUnderstandingHandler:
             trace.span_exit("image_understanding")
             return FinalAnswer(answer=f"Image file not found: {image_path}")
 
-        profile = MODEL_REGISTRY["image_understanding"]
         result = llm.structured(
             LLMRequest(
-                model=profile.model,
-                system=profile.system
+                model=self._profile.model,
+                system=self._profile.system
                 + " Return JSON with description, visible_objects, and visible_text.",
                 user=_build_user_content(user_input, image_path),
-                max_tokens=profile.max_tokens,
-                temperature=profile.temperature,
+                max_tokens=self._profile.max_tokens,
+                temperature=self._profile.temperature,
             ),
             ImageDescription,
         )

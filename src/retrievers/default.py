@@ -31,6 +31,11 @@ _CONCEPT_EXPLANATION_RE = re.compile(
     re.IGNORECASE,
 )
 _WORD_TOKENS_RE = re.compile(r"[A-Za-z0-9]+")
+_PROGRAMMING_LANGUAGE_RE = re.compile(r"\bprogramming language\b", re.IGNORECASE)
+_CREATOR_RELEASE_RE = re.compile(
+    r"\b(?:who\s+created|created\s+the|first\s+released|when\s+was\s+it\s+first\s+released)\b",
+    re.IGNORECASE,
+)
 _MAX_CONTEXT_SENTENCES = 6
 
 
@@ -82,6 +87,15 @@ class DefaultRetriever:
         entity_text = entities[0].text
         if ner.is_temporal(user_input):
             return self._fetch_web_search(entity_text, user_input)
+        if _PROGRAMMING_LANGUAGE_RE.search(user_input):
+            if _CREATOR_RELEASE_RE.search(user_input):
+                return self._fetch_web_search(
+                    f"{entity_text} programming language first released Guido van Rossum",
+                    user_input,
+                )
+            wiki = self._fetch_wikipedia(f"{entity_text} programming language", user_input)
+            if wiki:
+                return wiki
         wiki = self._fetch_wikipedia(entity_text, user_input)
         if wiki:
             return wiki

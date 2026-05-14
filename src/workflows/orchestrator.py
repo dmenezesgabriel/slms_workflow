@@ -7,10 +7,10 @@ from typing import Callable
 from pydantic import BaseModel
 
 from src import trace
-from src.graph.base import NodeRegistry, WorkflowNode
+from src.graph.base import NodeRegistry
 from src.graph.dag import GraphNode, WorkflowGraph, run_graph
 from src.llm_client import LLMClient
-from src.router import route_task
+from src.router import Router, route_task
 from src.schemas import IntentName
 from src.tools import ToolRegistry
 from src.workflows.composer import DAGComposer
@@ -23,21 +23,16 @@ class Orchestrator:
         node_registry: NodeRegistry,
         tool_registry: ToolRegistry,
         planner: Planner | None = None,
+        router: Router | None = None,
     ) -> None:
         self.node_registry = node_registry
         self.tool_registry = tool_registry
+        self._router = router or Router()
         self._planner = planner or Planner(
             node_registry=node_registry,
             tool_registry=tool_registry,
+            router=self._router,
         )
-
-    def _node(self, intent: str) -> WorkflowNode:
-        node = self.node_registry.get(intent)
-        if node is None:
-            node = self.node_registry.get("general")
-        if node is None:
-            raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
-        return node
 
     def run(
         self,
@@ -66,7 +61,11 @@ class Orchestrator:
         return self._planner.plan(user_input, llm)
 
     def run_direct(self, user_input: str, llm: LLMClient) -> BaseModel:
-        return self.run_direct_with_intent(user_input, llm, route_task(user_input, llm).intent)
+        return self.run_direct_with_intent(
+            user_input,
+            llm,
+            route_task(user_input, llm, self._router).intent,
+        )
 
     def run_direct_with_intent(
         self, user_input: str, llm: LLMClient, intent: IntentName | None = None
@@ -76,7 +75,7 @@ class Orchestrator:
         graph = WorkflowGraph(
             name=intent,
             description=f"Direct dispatch to {intent}.",
-            nodes=(GraphNode("final", self._node(intent), "{query}"),),
+            nodes=(GraphNode("final", self.node_registry.resolve(intent), "{query}"),),
             final_node="final",
         )
         result, _trace = run_graph(graph, user_input, llm)

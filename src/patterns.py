@@ -27,8 +27,8 @@ PROPER_NOUN_RE = re.compile(
 
 RETRIEVAL_SIGNALS_RE = re.compile(
     r"\b(latest|current|recent|today|news|price|weather|stock|score|"
-    r"winner|elected|released|launched|announced|update|version|"
+    r"winner|elected|update|version|"
     r"últimas?|atual|recente|hoje|notícias?|preço|clima|tempo|"
-    r"vencedor|eleito|lançado|anunciado|atualização|versão)\b",
+    r"vencedor|eleito|atualização|versão)\b",
     re.IGNORECASE,
 )

@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from src import trace
 from src.llm_client import LLMClient, LLMRequest
-from src.model_registry import MODEL_REGISTRY
+from src.model_registry import MODEL_REGISTRY, ModelProfile
 from src.patterns import IMAGE_REF_RE as _IMAGE_REF_PATTERN
 from src.schemas import IntentClassification, IntentName
 
@@ -150,6 +150,9 @@ _ml_router = _MLRouter()
 
 
 class Router:
+    def __init__(self, profile: ModelProfile | None = None) -> None:
+        self._profile = profile or MODEL_REGISTRY["router"]
+
     def classify_ml(self, user_input: str) -> IntentClassification | None:
         if not user_input.strip():
             return IntentClassification(
@@ -186,19 +189,18 @@ class Router:
             trace.route(result.intent, result.confidence, "ml")
             return result
 
-        profile = MODEL_REGISTRY["router"]
         result = llm.structured(
             LLMRequest(
-                model=profile.model,
-                system=profile.system,
+                model=self._profile.model,
+                system=self._profile.system,
                 user=(
                     "Classify this user input into one of: "
                     "summarization, question_answering, function_calling, "
                     "classification, image_understanding, general, unclassified.\n\n"
                     f"User input: {user_input}"
                 ),
-                max_tokens=profile.max_tokens,
-                temperature=profile.temperature,
+                max_tokens=self._profile.max_tokens,
+                temperature=self._profile.temperature,
             ),
             IntentClassification,
         )
@@ -223,5 +225,9 @@ def classify_ml(user_input: str) -> IntentClassification | None:
     return _router.classify_ml(user_input)
 
 
-def route_task(user_input: str, llm: LLMClient) -> IntentClassification:
-    return _router.route(user_input, llm)
+def route_task(
+    user_input: str,
+    llm: LLMClient,
+    router: Router | None = None,
+) -> IntentClassification:
+    return (router or _router).route(user_input, llm)

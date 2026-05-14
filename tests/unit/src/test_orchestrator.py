@@ -121,3 +121,25 @@ def test_entity_relation_returns_single_node_dag(
     assert len(plan.nodes) == 1
     assert plan.nodes[0].node.id == "question_answering"
     assert route_task.call_count == 1
+
+
+def test_node_registry_resolve_returns_specific_node_before_fallback() -> None:
+    registry = _build_node_registry("question_answering", "general")
+
+    assert registry.resolve("question_answering").id == "question_answering"
+
+
+def test_node_registry_resolve_falls_back_to_general() -> None:
+    registry = _build_node_registry("general")
+
+    assert registry.resolve("question_answering").id == "general"
+
+
+def test_node_registry_resolve_raises_without_general_fallback() -> None:
+    registry = NodeRegistry([])
+
+    with pytest.raises(
+        KeyError,
+        match="Node registry misconfigured: no 'question_answering' and no 'general' fallback",
+    ):
+        registry.resolve("question_answering")

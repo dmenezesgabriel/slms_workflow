@@ -4,16 +4,22 @@ from pydantic import BaseModel
 
 from src import tool_selection, trace
 from src.llm_client import LLMClient, LLMRequest
-from src.model_registry import MODEL_REGISTRY
+from src.model_registry import MODEL_REGISTRY, ModelProfile
 from src.schemas import FinalAnswer, ToolDecision
 from src.tools import ToolRegistry
 
 
 class FunctionCallingHandler:
-    intent = "function_calling"
+    id = "function_calling"
+    intent = id
 
-    def __init__(self, tool_registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        tool_registry: ToolRegistry,
+        profile: ModelProfile | None = None,
+    ) -> None:
         self._tool_registry = tool_registry
+        self._profile = profile or MODEL_REGISTRY["function_calling"]
 
     def _build_system_prompt(self) -> str:
         return (
@@ -31,6 +37,9 @@ class FunctionCallingHandler:
             return FinalAnswer(answer=f"{result.tool_name} result: {result.result}")
         message = "Tool execution failed for {}: {}".format(result.tool_name, result.error)
         return FinalAnswer(answer=message)
+
+    def execute(self, input: str, llm: LLMClient) -> BaseModel:
+        return self.handle(input, llm)
 
     def handle(self, user_input: str, llm: LLMClient) -> BaseModel:
         trace.handler("function_calling", user_input)
@@ -56,14 +65,13 @@ class FunctionCallingHandler:
             trace.fast_path("ner_entity", decision.tool_name)
             return self._dispatch(decision)
 
-        profile = MODEL_REGISTRY["function_calling"]
         decision = llm.structured(
             LLMRequest(
-                model=profile.model,
+                model=self._profile.model,
                 system=self._build_system_prompt(),
                 user=user_input,
-                max_tokens=profile.max_tokens,
-                temperature=profile.temperature,
+                max_tokens=self._profile.max_tokens,
+                temperature=self._profile.temperature,
             ),
             ToolDecision,
         )

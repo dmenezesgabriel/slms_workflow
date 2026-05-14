@@ -5,9 +5,10 @@ from __future__ import annotations
 import importlib
 
 from src import trace
-from src.graph.base import NodeRegistry, WorkflowNode
+from src.graph.base import NodeRegistry
 from src.graph.dag import GraphNode, WorkflowGraph
 from src.llm_client import LLMClient
+from src.router import Router
 from src.tools import ToolRegistry
 from src.workflows.composer import DAGComposer, _looks_like_ambiguous_multi_tool_task
 
@@ -18,20 +19,14 @@ class Planner:
         node_registry: NodeRegistry,
         tool_registry: ToolRegistry,
         composer: DAGComposer | None = None,
+        router: Router | None = None,
     ) -> None:
         self._node_registry = node_registry
         self._composer = composer or DAGComposer(
             node_registry=node_registry,
             tool_registry=tool_registry,
         )
-
-    def _node(self, intent: str) -> WorkflowNode:
-        node = self._node_registry.get(intent)
-        if node is None:
-            node = self._node_registry.get("general")
-        if node is None:
-            raise KeyError(f"Node registry misconfigured: no {intent!r} and no 'general' fallback")
-        return node
+        self._router = router or Router()
 
     def plan(self, user_input: str, llm: LLMClient) -> WorkflowGraph:
         trace.span_enter("planning")
@@ -60,7 +55,7 @@ class Planner:
                 "question_answering", "Deterministic recommendation/question pattern."
             )
 
-        intent = planner_shim.route_task(stripped, llm)
+        intent = planner_shim.route_task(stripped, llm, self._router)
         trace.plan_step("single", intent.intent)
         trace.span_exit("planning")
         return self._single(intent.intent, intent.reason)
@@ -69,7 +64,7 @@ class Planner:
         return WorkflowGraph(
             name=intent,
             description=description,
-            nodes=(GraphNode("final", self._node(intent), "{query}"),),
+            nodes=(GraphNode("final", self._node_registry.resolve(intent), "{query}"),),
             final_node="final",
         )
 
@@ -77,6 +72,6 @@ class Planner:
         return WorkflowGraph(
             name="agent",
             description=description,
-            nodes=(GraphNode("agent", self._node("agent"), "{query}"),),
+            nodes=(GraphNode("agent", self._node_registry.resolve("agent"), "{query}"),),
             final_node="agent",
         )
