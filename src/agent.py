@@ -3,9 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from src import trace
+from src.graph.base import WorkflowNode
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY
-from src.nodes.base import WorkflowNode
 from src.schemas import AgentStep, FinalAnswer, ToolDecision
 from src.text_utils import compress, extract_text
 from src.tool_selection import extract_math

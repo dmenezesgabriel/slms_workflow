@@ -7,8 +7,8 @@ build_tool_registry() or build_node_registry() is called.
 
 from __future__ import annotations
 
+from src.graph.base import NodeRegistry
 from src.nodes.agent_node import AgentNode
-from src.nodes.base import NodeRegistry
 from src.nodes.classification_node import ClassificationNode
 from src.nodes.function_calling_node import FunctionCallingNode
 from src.nodes.general_node import GeneralNode

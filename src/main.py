@@ -11,12 +11,12 @@ from src.agent import run_agent
 from src.bootstrap import build_node_registry, build_tool_registry
 from src.llm_client import LLMClient
 from src.model_registry import apply_model_overrides, ensure_model_available, known_model_aliases
-from src.orchestrator import Dispatch, Orchestrator
 from src.providers.openai_local import OpenAILocalClient
 from src.techniques.fuzzy import match_workflow
 from src.text_utils import extract_text
 from src.ui import AssistantUI, CommandHelp
-from src.workflow import get_workflow_registry, run_workflow, set_node_registry
+from src.workflows.catalog import get_workflow_registry, run_workflow, set_node_registry
+from src.workflows.orchestrator import Dispatch, Orchestrator
 
 _orchestrator: Orchestrator | None = None
 

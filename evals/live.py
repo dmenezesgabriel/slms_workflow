@@ -337,17 +337,16 @@ def _capture_run(fn: Callable[[], str]) -> tuple[str, list[str], float]:
 def _run_direct(prompt: str) -> str:
     from src.main import run
     from src.providers.openai_local import OpenAILocalClient
+    from src.text_utils import extract_text
 
     result = run(prompt, OpenAILocalClient())
-    from src.context import extract_text
-
     return extract_text(result)
 
 
 def _run_workflow(name: str, prompt: str) -> str:
     from src import trace as trace_module
-    from src.context import extract_text
     from src.providers.openai_local import OpenAILocalClient
+    from src.text_utils import extract_text
     from src.workflow import WORKFLOW_REGISTRY, run_workflow
 
     trace_module.init()
@@ -359,8 +358,8 @@ def _run_workflow(name: str, prompt: str) -> str:
 def _run_agent(prompt: str) -> str:
     from src import trace as trace_module
     from src.agent import run_agent
-    from src.context import extract_text
     from src.providers.openai_local import OpenAILocalClient
+    from src.text_utils import extract_text
 
     trace_module.init()
     result = run_agent(prompt, OpenAILocalClient())

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from src.graph.base import WorkflowNode
 from src.llm_client import LLMClient
-from src.nodes.base import WorkflowNode
 from src.tools import ToolRegistry
 
 

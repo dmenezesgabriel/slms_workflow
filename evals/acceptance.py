@@ -185,9 +185,9 @@ def _evaluate(
 
 def _run_case(case: AcceptanceCase) -> AcceptanceResult:
     from src import trace as trace_module
-    from src.context import extract_text
     from src.main import run
     from src.providers.openai_local import OpenAILocalClient
+    from src.text_utils import extract_text
 
     trace_module.init()
     answer, trace_lines, elapsed = _capture_run(

@@ -35,31 +35,53 @@ class ExecutionPort:
 
     @staticmethod
     def run_unified_assistant(prompt: str, llm_client: Any) -> ExecutionResult:
-        from src.context import extract_text
         from src.main import run
+        from src.text_utils import extract_text
 
         return _capture_execution(lambda: extract_text(run(prompt, llm_client)))
 
     @staticmethod
     def run_agent(prompt: str, llm_client: Any) -> ExecutionResult:
         from src.agent import run_agent
-        from src.context import extract_text
+        from src.bootstrap import build_node_registry, build_tool_registry
+        from src.text_utils import extract_text
 
-        return _capture_execution(lambda: extract_text(run_agent(prompt, llm_client)))
+        tool_registry = build_tool_registry()
+        node_registry = build_node_registry(tool_registry=tool_registry)
+        action_nodes = {
+            "summarize": node_registry.get("summarization"),
+            "classify": node_registry.get("classification"),
+            "answer": node_registry.get("question_answering"),
+        }
+        resolved_action_nodes = {k: v for k, v in action_nodes.items() if v is not None}
+        return _capture_execution(
+            lambda: extract_text(
+                run_agent(
+                    prompt,
+                    llm_client,
+                    tool_registry=tool_registry,
+                    action_nodes=resolved_action_nodes,
+                )
+            )
+        )
 
     @staticmethod
     def run_workflow(workflow_name: str, prompt: str, llm_client: Any) -> ExecutionResult:
-        from src.context import extract_text
-        from src.workflow import WORKFLOW_REGISTRY, run_workflow
+        from src.bootstrap import build_node_registry, build_tool_registry
+        from src.text_utils import extract_text
+        from src.workflow import get_workflow_registry, run_workflow, set_node_registry
 
-        workflow = WORKFLOW_REGISTRY[workflow_name]
+        tool_registry = build_tool_registry()
+        node_registry = build_node_registry(tool_registry=tool_registry)
+        set_node_registry(node_registry)
+        workflow = get_workflow_registry()[workflow_name]
         return _capture_execution(lambda: extract_text(run_workflow(workflow, prompt, llm_client)))
 
     @staticmethod
     def run_acceptance_case(case_id: str, llm_client: Any) -> tuple[ExecutionResult, Any]:
         from evals.acceptance import CASE_BY_ID, _evaluate
-        from src.context import extract_text
         from src.main import run
+        from src.text_utils import extract_text
 
         case = CASE_BY_ID[case_id]
         result = _capture_execution(lambda: extract_text(run(case.prompt, llm_client)))
