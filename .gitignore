@@ -16,3 +16,4 @@ models/*
 mlruns
 mutants/
 .mutmut-cache
+*.log
