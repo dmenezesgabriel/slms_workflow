@@ -49,6 +49,34 @@ class TestFullPipeline:
 
 
 @pytest.mark.integration
+class TestProtectedAndTargetImprovementPrompts:
+    def test_portuguese_summarization_prompt_returns_non_empty_response(
+        self, llm_client: object
+    ) -> None:
+        prompt = (
+            "resuma este texto: Python é uma linguagem de programação criada por Guido van Rossum. "
+            "Ela é usada em web, automação e ciência de dados."
+        )
+        result = run(prompt, llm_client)  # type: ignore[arg-type]
+        answer = extract_text(result)
+        assert len(answer.strip()) > 0
+
+    def test_target_improvement_paraphrase_prompt_returns_non_empty_response(
+        self, llm_client: object
+    ) -> None:
+        result = run("could you make this shorter?", llm_client)  # type: ignore[arg-type]
+        answer = extract_text(result)
+        assert len(answer.strip()) > 0
+
+    def test_portuguese_paraphrase_prompt_returns_non_empty_response(
+        self, llm_client: object
+    ) -> None:
+        result = run("pode resumir isso? Python é muito usado em automação.", llm_client)  # type: ignore[arg-type]
+        answer = extract_text(result)
+        assert len(answer.strip()) > 0
+
+
+@pytest.mark.integration
 class TestRouterWithLLMFallback:
     def test_low_confidence_falls_back_to_llm(self, llm_client: object) -> None:
         # This should fall below the TF-IDF threshold and use the LLM router

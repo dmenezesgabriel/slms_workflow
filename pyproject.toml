@@ -66,3 +66,4 @@ mutate_only_covered_lines = true
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
+exclude = "^(evals/|features/)"

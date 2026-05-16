@@ -10,11 +10,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _WHITESPACE = re.compile(r"\s+")
+_BLANK_LINE = re.compile(r"\n\s*\n")
 _MIN_LEN = 20
 _MAX_LEN = 400
 
 
 def _sentences(text: str) -> list[str]:
+    text = _BLANK_LINE.sub(". ", text)
     return [
         s
         for s in _SENTENCE_SPLIT.split(_WHITESPACE.sub(" ", text).strip())

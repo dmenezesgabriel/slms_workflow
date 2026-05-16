@@ -48,6 +48,47 @@ class TestContentGuard:
         assert result == FinalAnswer(answer=NO_TEXT_ANSWER)
         assert llm.structured.call_count == 0
 
+    def test_calls_llm_for_short_but_meaningful_content(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = SUMMARY_RESULT
+        llm_request_class = MagicMock(return_value=LLM_REQUEST)
+        monkeypatch.setattr(summarization, "LLMRequest", llm_request_class)
+
+        result = summarization.handle("summarize short but valid memo", llm)
+
+        assert result == SUMMARY_RESULT
+        assert llm.structured.call_count == 1
+        assert (
+            llm_request_class.call_args.kwargs["user"]
+            == "Summarize this text:\n\nshort but valid memo"
+        )
+
+    def test_calls_llm_for_short_meaningful_portuguese_content(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = SUMMARY_RESULT
+        llm_request_class = MagicMock(return_value=LLM_REQUEST)
+        monkeypatch.setattr(summarization, "LLMRequest", llm_request_class)
+
+        result = summarization.handle("resuma nota curta valida", llm)
+
+        assert result == SUMMARY_RESULT
+        assert (
+            llm_request_class.call_args.kwargs["user"]
+            == "Summarize this text:\n\nnota curta valida"
+        )
+
+    def test_rejects_short_generic_prompt_without_real_content(self) -> None:
+        llm = MagicMock()
+
+        result = summarization.handle("summarize this short text", llm)
+
+        assert result == FinalAnswer(answer=NO_TEXT_ANSWER)
+        assert llm.structured.call_count == 0
+
     def test_calls_llm_when_content_word_count_meets_minimum(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

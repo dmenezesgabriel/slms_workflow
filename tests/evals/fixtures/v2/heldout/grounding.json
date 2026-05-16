@@ -1,0 +1,11 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "grounding",
+  "cases": [
+    {"id": "grounding-heldout-protected-supported-location", "cohort": "protected", "context": "Lisbon is the capital of Portugal and sits on the Tagus River.", "answer": "Lisbon is Portugal's capital and sits on the Tagus River.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "synthetic"},
+    {"id": "grounding-heldout-protected-unsupported-numeric", "cohort": "protected", "context": "The museum guide says the exhibit opens at 9 AM and closes every Monday.", "answer": "The museum guide says the exhibit opens at 10 AM and closes every Monday.", "expected_passed": false, "expected_unsupported_claim_detected": true, "source_kind": "synthetic"},
+    {"id": "grounding-heldout-target-real-api-summary", "cohort": "target_improvement", "context": "The release notes say the API now supports pagination, adds request IDs to error responses, and deprecates the legacy sync endpoint.", "answer": "The release notes indicate that the API now supports pagination, adds request IDs to error responses, and deprecates the legacy sync endpoint.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "captured_model_output"},
+    {"id": "grounding-heldout-target-real-museum-summary", "cohort": "target_improvement", "context": "The museum guide says the exhibit opens at 9 AM, includes three rooms about robotics, and closes every Monday.", "answer": "The museum guide states that the exhibit opens at 9 AM, includes three rooms about robotics, and closes every Monday.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "captured_model_output"}
+  ]
+}

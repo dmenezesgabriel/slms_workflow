@@ -1,0 +1,33 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "summarization_answer_quality",
+  "cases": [
+    {
+      "id": "summary-quality-heldout-api",
+      "cohort": "protected",
+      "source_kind": "captured_model_output",
+      "model_alias": "qwen3.5-0.8b-text",
+      "title": "API Update Summary",
+      "summary": "The release notes indicate that the API now supports pagination, adds request IDs to error responses, and deprecates the legacy sync endpoint.",
+      "key_points": ["Supports pagination", "Adds request IDs to error responses", "Deprecates legacy sync endpoint"],
+      "required_concepts": ["pagination", "request IDs", "legacy sync endpoint"],
+      "forbidden_concepts": ["GraphQL"],
+      "min_required_coverage": 1.0,
+      "expected_passed": true
+    },
+    {
+      "id": "summary-quality-heldout-museum",
+      "cohort": "target_improvement",
+      "source_kind": "captured_model_output",
+      "model_alias": "qwen3.5-0.8b-text",
+      "title": "Museum Schedule",
+      "summary": "The museum guide states that the exhibit opens at 9 AM, includes three rooms about robotics, and closes every Monday.",
+      "key_points": ["Exhibit opens at 9 AM", "Includes three rooms about robotics", "Closes every Monday"],
+      "required_concepts": ["9 AM", "three rooms", "robotics", "every Monday"],
+      "forbidden_concepts": ["Tuesday"],
+      "min_required_coverage": 1.0,
+      "expected_passed": true
+    }
+  ]
+}

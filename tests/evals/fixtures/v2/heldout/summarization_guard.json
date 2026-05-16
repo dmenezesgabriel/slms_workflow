@@ -1,0 +1,10 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "summarization_guard",
+  "cases": [
+    {"id": "summary-guard-heldout-protected-content", "cohort": "protected", "prompt": "tl;dr architecture memo about caching invalidation", "expected_blocked": false},
+    {"id": "summary-guard-heldout-target-pt-generic", "cohort": "target_improvement", "prompt": "resumo do texto", "expected_blocked": true},
+    {"id": "summary-guard-heldout-target-english-short-valid", "cohort": "target_improvement", "prompt": "summarize outage memo about retry backoff", "expected_blocked": false}
+  ]
+}

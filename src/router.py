@@ -1,149 +1,56 @@
 from __future__ import annotations
 
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from dataclasses import dataclass
 
 from src import trace
+from src.lexical_scoring import LexicalMatch, best_lexical_match
 from src.llm_client import LLMClient, LLMRequest
 from src.model_registry import MODEL_REGISTRY, ModelProfile
 from src.patterns import IMAGE_REF_RE as _IMAGE_REF_PATTERN
+from src.router_prototypes import ROUTER_PROTOTYPES
 from src.schemas import IntentClassification, IntentName
+from src.text_normalization import normalize_text
 
 _FAST_ROUTE_THRESHOLD = 0.25
 _LLM_FALLBACK_THRESHOLD = 0.60
 
-_INTENT_EXAMPLES: dict[IntentName, list[str]] = {
-    "summarization": [
-        "summarize this",
-        "give me a summary",
-        "tl;dr",
-        "sum this up",
-        "brief summary",
-        "condense this",
-        "make it shorter",
-        "abstract",
-        "can you summarize",
-        "resuma",
-        "resumo disso",
-        "resume este texto",
-        "me dá um resumo",
-        "resumo deste",
-        "pode resumir",
-        "faça um resumo",
-    ],
-    "question_answering": [
-        "what is the capital",
-        "what is machine learning",
-        "what is Docker",
-        "what is a neural network",
-        "who invented",
-        "how does this work",
-        "why does",
-        "when did this happen",
-        "where is located",
-        "explain to me",
-        "tell me about",
-        "could you explain",
-        "help me understand",
-        "qual é a capital",
-        "como funciona",
-        "o que é",
-        "quem é",
-        "quem foi",
-        "me fale sobre",
-        "me conta sobre",
-        "me explique",
-        "onde fica",
-        "por que",
-        "quando foi",
-        "me diga sobre",
-        "I want to know about",
-        "can you tell me",
-    ],
-    "function_calling": [
-        "calculate",
-        "compute this",
-        "what is 3 plus 5",
-        "run the tool",
-        "evaluate this expression",
-        "math problem",
-        "add these numbers",
-        "multiply",
-        "divide by",
-        "what is 2 times 3",
-        "calcule",
-        "resultado de",
-        "search for",
-        "search the web for",
-        "look up",
-        "fetch the url",
-        "fetch this page",
-        "look up on wikipedia",
-        "find information about",
-        "latest news about",
-        "recent news on",
-        "current news about",
-        "últimas notícias sobre",
-        "notícias recentes",
-    ],
-    "classification": [
-        "classify this text",
-        "determine the category",
-        "label this text",
-        "detect the sentiment",
-        "is this positive or negative",
-        "what type of text is this",
-        "categorize this",
-        "assign a label",
-        "find the category",
-        "determine intent of this text",
-    ],
-    "image_understanding": [
-        "what is in this image",
-        "describe the picture",
-        "analyze this photo",
-        "what do you see",
-        "look at this image",
-        "read this screenshot",
-        "what does the image show",
-    ],
-    "general": [
-        "hello",
-        "hi there",
-        "hey",
-        "good morning",
-        "good evening",
-        "how are you",
-        "what can you do",
-        "thanks",
-        "thank you",
-        "oi",
-        "olá",
-    ],
-}
+
+@dataclass(frozen=True)
+class PrototypeClassification:
+    intent: IntentName
+    match: LexicalMatch
+    prototype: str
 
 
 class _MLRouter:
     def __init__(self) -> None:
-        examples: list[str] = []
-        labels: list[IntentName] = []
-
-        for intent, phrases in _INTENT_EXAMPLES.items():
-            examples.extend(phrases)
-            labels.extend([intent] * len(phrases))
-
-        self._labels = labels
-        self._vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=1, sublinear_tf=True)
-        self._matrix = self._vectorizer.fit_transform(examples)
+        self._prototypes = ROUTER_PROTOTYPES
 
     def classify(self, text: str) -> tuple[IntentName, float]:
-        snippet = text[:100].lower()
-        vec = self._vectorizer.transform([snippet])
-        scores = cosine_similarity(vec, self._matrix)[0]
-        best_idx = int(np.argmax(scores))
-        score = min(1.0, float(scores[best_idx]))
-        return self._labels[best_idx], score
+        result = self.classify_with_details(text)
+        return result.intent, result.match.score
+
+    def classify_with_details(self, text: str) -> PrototypeClassification:
+        normalized_text = normalize_text(text, strip_punctuation=True)
+        best_result: PrototypeClassification | None = None
+
+        for intent, prototypes in self._prototypes.items():
+            match = best_lexical_match(normalized_text, list(prototypes))
+            if match is None:
+                continue
+            candidate = PrototypeClassification(intent=intent, match=match, prototype=match.value)
+            if best_result is None or candidate.match.score > best_result.match.score:
+                best_result = candidate
+
+        if best_result is None:
+            return PrototypeClassification(
+                intent="general",
+                prototype="",
+                match=LexicalMatch(
+                    value="", score=0.0, token_overlap=0.0, fuzzy=0.0, char_ngram=0.0
+                ),
+            )
+        return best_result
 
 
 _ml_router = _MLRouter()
@@ -162,9 +69,17 @@ class Router:
             return IntentClassification(
                 intent="image_understanding", confidence=1.0, reason="Image path detected."
             )
-        intent, score = _ml_router.classify(user_input)
-        if score >= _FAST_ROUTE_THRESHOLD:
-            return IntentClassification(intent=intent, confidence=score, reason="ML router match.")
+        result = _ml_router.classify_with_details(user_input)
+        if result.match.score >= _FAST_ROUTE_THRESHOLD:
+            return IntentClassification(
+                intent=result.intent,
+                confidence=result.match.score,
+                reason=(
+                    "Prototype router match: "
+                    f"'{result.prototype}' (overlap={result.match.token_overlap:.2f}, "
+                    f"fuzzy={result.match.fuzzy:.2f}, char_ngram={result.match.char_ngram:.2f})."
+                ),
+            )
         return None
 
     def route(self, user_input: str, llm: LLMClient) -> IntentClassification:
@@ -180,14 +95,10 @@ class Router:
                 reason="Image path reference detected.",
             )
 
-        intent, score = _ml_router.classify(user_input)
-
-        if score >= _FAST_ROUTE_THRESHOLD:
-            result = IntentClassification(
-                intent=intent, confidence=score, reason="ML router match."
-            )
-            trace.route(result.intent, result.confidence, "ml")
-            return result
+        fast_result = self.classify_ml(user_input)
+        if fast_result is not None:
+            trace.route(fast_result.intent, fast_result.confidence, "ml")
+            return fast_result
 
         result = llm.structured(
             LLMRequest(

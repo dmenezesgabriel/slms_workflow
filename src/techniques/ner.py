@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from src import trace
+from src.lexical_scoring import combined_lexical_score
+from src.text_normalization import normalize_text
 
 _ENABLED = os.getenv("SLM_NER", "1") == "1"
 
@@ -82,6 +84,24 @@ def extract(text: str) -> list[Entity]:
 
 def lookup_entities(text: str) -> list[Entity]:
     return [e for e in extract(text) if e.label in _LOOKUP_LABELS]
+
+
+def best_lookup_entity(text: str, entities: list[Entity] | None = None) -> Entity | None:
+    candidates = (
+        lookup_entities(text)
+        if entities is None
+        else [e for e in entities if e.label in _LOOKUP_LABELS]
+    )
+    if not candidates:
+        return None
+
+    normalized_text = normalize_text(text, strip_punctuation=True)
+
+    def score(entity: Entity) -> tuple[float, int, int]:
+        similarity = combined_lexical_score(normalized_text, entity.text).score
+        return (similarity, len(entity.text), -candidates.index(entity))
+
+    return max(candidates, key=score)
 
 
 def is_temporal(text: str) -> bool:

@@ -1,0 +1,14 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "summarization_guard",
+  "cases": [
+    {"id": "summary-guard-dev-protected-no-content", "cohort": "protected", "prompt": "summarize this text for me", "expected_blocked": true},
+    {"id": "summary-guard-dev-protected-content-present", "cohort": "protected", "prompt": "summarize important word important word important word important word important word", "expected_blocked": false},
+    {"id": "summary-guard-dev-protected-pt-no-content", "cohort": "protected", "prompt": "resuma isso", "expected_blocked": true},
+    {"id": "summary-guard-dev-target-valid-short-input", "cohort": "target_improvement", "prompt": "summarize short but valid memo", "expected_blocked": false},
+    {"id": "summary-guard-dev-target-release-notes", "cohort": "target_improvement", "prompt": "summary: release notes mention bug fixes and login retry changes", "expected_blocked": false},
+    {"id": "summary-guard-dev-target-pt-valid-short", "cohort": "target_improvement", "prompt": "resuma nota curta sobre login falhando", "expected_blocked": false},
+    {"id": "summary-guard-dev-target-generic-please", "cohort": "target_improvement", "prompt": "summary please", "expected_blocked": true}
+  ]
+}

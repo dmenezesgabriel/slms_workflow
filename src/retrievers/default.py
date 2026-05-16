@@ -1,41 +1,17 @@
 from __future__ import annotations
 
-import re
-
 from src import text_utils as context
 from src import trace
-from src.patterns import RECOMMENDATION_RE as _RECOMMENDATION_RE
-from src.patterns import RETRIEVAL_SIGNALS_RE as _RETRIEVAL_SIGNALS
-from src.patterns import URL_RE as _URL_PATTERN
 from src.techniques import ner
 from src.techniques.retrieval import (
     Retriever,
     _concept_search_queries,
     _is_successful_wikipedia_result,
     _reference_search_queries,
-    extract_direct_what_is_entity,
+    plan_retrieval,
 )
 from src.tools.base import Tool
 
-_REFERENCE_LOOKUP_RE = re.compile(
-    r"\b(?:which|what|who|where|quando|qual|que)\b.*"
-    r"\b(?:movie|film|book|song|quote|says|said|called|reference|meme|"
-    r"filme|livro|música|frase|cita(?:ção|cao)|diz|disse|refer[eê]ncia)\b|"
-    r"\b(?:movie|film|book|song|quote|reference|meme|filme|livro|música|frase)\b.*"
-    r"\b(?:which|what|who|where|qual|que)\b",
-    re.IGNORECASE,
-)
-_CONCEPT_EXPLANATION_RE = re.compile(
-    r"\b(?:explain|explique|explica|what\s+are|o\s+que\s+s[aã]o)\b.*"
-    r"\b(?:principles|principles?|princ[ií]pios|patterns|conceitos)\b",
-    re.IGNORECASE,
-)
-_WORD_TOKENS_RE = re.compile(r"[A-Za-z0-9]+")
-_PROGRAMMING_LANGUAGE_RE = re.compile(r"\bprogramming language\b", re.IGNORECASE)
-_CREATOR_RELEASE_RE = re.compile(
-    r"\b(?:who\s+created|created\s+the|first\s+released|when\s+was\s+it\s+first\s+released)\b",
-    re.IGNORECASE,
-)
 _MAX_CONTEXT_SENTENCES = 6
 
 
@@ -46,33 +22,26 @@ class DefaultRetriever:
         self._wikipedia = wikipedia
 
     def fetch_context(self, user_input: str) -> str:
-        url_match = _URL_PATTERN.search(user_input)
-        if url_match:
-            trace.retrieval("web_fetch", url_match.group())
-            raw = self._web_fetch.execute({"url": url_match.group()})
+        plan = plan_retrieval(user_input)
+
+        if plan.strategy == "url_fetch" and plan.query is not None:
+            trace.retrieval("web_fetch", plan.query)
+            raw = self._web_fetch.execute({"url": plan.query})
             return context.compress(raw, query=user_input, max_sentences=_MAX_CONTEXT_SENTENCES)
 
-        if _RETRIEVAL_SIGNALS.search(user_input):
+        if plan.strategy == "time_sensitive":
             return self._fetch_time_sensitive(user_input)
-
-        if _REFERENCE_LOOKUP_RE.search(user_input):
+        if plan.strategy == "reference_lookup":
             return self._fetch_reference(user_input)
-
-        if _RECOMMENDATION_RE.search(user_input):
+        if plan.strategy == "recommendation_lookup":
             return self._fetch_recommendation(user_input)
-
-        if _CONCEPT_EXPLANATION_RE.search(user_input):
+        if plan.strategy == "concept_lookup":
             return self._fetch_concept(user_input)
-
-        entity_context = self._fetch_entity(user_input)
-        if entity_context:
-            return entity_context
-
-        candidate = extract_direct_what_is_entity(user_input)
-        if candidate is None:
-            return ""
-
-        return self._fetch_wikipedia(candidate, user_input)
+        if plan.strategy == "entity_lookup":
+            return self._fetch_entity(user_input)
+        if plan.strategy == "direct_what_is" and plan.query is not None:
+            return self._fetch_wikipedia(plan.query, user_input)
+        return ""
 
     def _fetch_time_sensitive(self, user_input: str) -> str:
         wiki = self._fetch_wikipedia(user_input, user_input)
@@ -81,16 +50,19 @@ class DefaultRetriever:
         return self._fetch_web_search(user_input, user_input)
 
     def _fetch_entity(self, user_input: str) -> str:
-        entities = ner.lookup_entities(user_input)
-        if not entities:
+        entity = ner.best_lookup_entity(user_input)
+        if entity is None:
             return ""
-        entity_text = entities[0].text
+        entity_text = entity.text
         if ner.is_temporal(user_input):
             return self._fetch_web_search(entity_text, user_input)
-        if _PROGRAMMING_LANGUAGE_RE.search(user_input):
-            if _CREATOR_RELEASE_RE.search(user_input):
+        if (
+            plan_retrieval(user_input).strategy == "entity_lookup"
+            and "programming language" in user_input.lower()
+        ):
+            if "created" in user_input.lower() or "first released" in user_input.lower():
                 return self._fetch_web_search(
-                    f"{entity_text} programming language first released Guido van Rossum",
+                    f"{entity_text} programming language creator first released",
                     user_input,
                 )
             wiki = self._fetch_wikipedia(f"{entity_text} programming language", user_input)
@@ -134,18 +106,7 @@ class DefaultRetriever:
 
     def _fetch_reference(self, user_input: str) -> str:
         queries = _reference_search_queries(user_input)
-        parts: list[str] = []
-
-        numeric_clues = [
-            t for t in _WORD_TOKENS_RE.findall(user_input) if t.isdigit() and len(t) >= 2
-        ]
-        for num in numeric_clues[:1]:
-            wiki_raw = self._wikipedia.execute({"query": num})
-            if _is_successful_wikipedia_result(wiki_raw):
-                trace.retrieval("wikipedia", num)
-                parts.append(wiki_raw)
-
-        parts.extend(self._run_search(q, max_results=5) for q in queries)
+        parts = [self._run_search(q, max_results=5) for q in queries]
         combined = "\n\n".join(filter(None, parts))
         return context.compress(combined, query=user_input, max_sentences=8)
 

@@ -1,0 +1,46 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "summarization_answer_quality",
+  "cases": [
+    {
+      "id": "summary-quality-dev-python",
+      "cohort": "protected",
+      "source_kind": "captured_model_output",
+      "model_alias": "qwen3.5-0.8b-text",
+      "title": "Python Development History",
+      "summary": "Python was created by Guido van Rossum and first released in 1991. It is widely used for automation, web development, and data science.",
+      "key_points": ["Created by: Guido van Rossum", "First release year: 1991", "Primary use cases: Automation, Web Development, Data Science"],
+      "required_concepts": ["Guido van Rossum", "1991", "automation", "web development", "data science"],
+      "forbidden_concepts": ["Java"],
+      "min_required_coverage": 1.0,
+      "expected_passed": true
+    },
+    {
+      "id": "summary-quality-dev-login",
+      "cohort": "protected",
+      "source_kind": "captured_model_output",
+      "model_alias": "qwen3.5-0.8b-text",
+      "title": "Memo Update on Login Service",
+      "summary": "The memo states that the login service now retries failed requests twice, logs timeout errors, and displays a clearer message to users.",
+      "key_points": ["login service retries failed requests twice", "logs timeout errors", "shows clearer user message"],
+      "required_concepts": ["retries failed requests twice", "logs timeout errors", "clearer message"],
+      "forbidden_concepts": ["database migration"],
+      "min_required_coverage": 1.0,
+      "expected_passed": true
+    },
+    {
+      "id": "summary-quality-dev-lisbon",
+      "cohort": "target_improvement",
+      "source_kind": "captured_model_output",
+      "model_alias": "qwen3.5-0.8b-text",
+      "title": "Lisbon, Portugal",
+      "summary": "Lisbon is the capital of Portugal. It sits on the Tagus River and is known for its hills and trams.",
+      "key_points": ["Capital of Portugal", "Sits on the Tagus River", "Known for hills and trams"],
+      "required_concepts": ["capital of Portugal", "Tagus River", "hills", "trams"],
+      "forbidden_concepts": ["Madrid"],
+      "min_required_coverage": 1.0,
+      "expected_passed": true
+    }
+  ]
+}

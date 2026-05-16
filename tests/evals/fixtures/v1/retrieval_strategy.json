@@ -1,0 +1,44 @@
+{
+  "version": "v1",
+  "capability": "retrieval_strategy",
+  "cases": [
+    {
+      "id": "retrieval-protected-url-fetch",
+      "cohort": "protected",
+      "prompt": "read https://example.com",
+      "expected_strategy": "url_fetch"
+    },
+    {
+      "id": "retrieval-protected-reference-lookup",
+      "cohort": "protected",
+      "prompt": "which song says hello from the other side?",
+      "expected_strategy": "reference_lookup"
+    },
+    {
+      "id": "retrieval-protected-time-sensitive",
+      "cohort": "protected",
+      "prompt": "latest news about OpenAI",
+      "expected_strategy": "time_sensitive"
+    },
+    {
+      "id": "retrieval-protected-concept-lookup",
+      "cohort": "protected",
+      "prompt": "explain the SOLID principles",
+      "expected_strategy": "concept_lookup"
+    },
+    {
+      "id": "retrieval-protected-direct-what-is",
+      "cohort": "protected",
+      "prompt": "What is spaCy?",
+      "expected_strategy": "direct_what_is",
+      "force_no_entity": true
+    },
+    {
+      "id": "retrieval-target-lowercase-what-is",
+      "cohort": "target_improvement",
+      "prompt": "what is spacy?",
+      "expected_strategy": "direct_what_is",
+      "force_no_entity": true
+    }
+  ]
+}

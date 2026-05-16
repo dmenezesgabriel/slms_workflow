@@ -5,7 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from src import router
-from src.schemas import IntentClassification
+from src.lexical_scoring import LexicalMatch
+from src.schemas import IntentClassification, IntentName
 
 FAST_ROUTE_CONFIDENCE = router._FAST_ROUTE_THRESHOLD
 BELOW_FAST_ROUTE_CONFIDENCE = router._FAST_ROUTE_THRESHOLD / 2
@@ -20,12 +21,28 @@ WHITESPACE_PROMPT = "   "
 LLM_REQUEST = object()
 
 
+def _prototype_result(
+    intent: IntentName, score: float, prototype: str = "summarize this"
+) -> router.PrototypeClassification:
+    return router.PrototypeClassification(
+        intent=intent,
+        prototype=prototype,
+        match=LexicalMatch(
+            value=prototype,
+            score=score,
+            token_overlap=score,
+            fuzzy=score,
+            char_ngram=score,
+        ),
+    )
+
+
 class TestClassifyMlShortCircuit:
     def test_returns_unclassified_when_input_is_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         classify = MagicMock()
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.classify_ml(EMPTY_PROMPT)
 
@@ -38,7 +55,7 @@ class TestClassifyMlShortCircuit:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         classify = MagicMock()
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.classify_ml(WHITESPACE_PROMPT)
 
@@ -51,7 +68,7 @@ class TestClassifyMlShortCircuit:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         classify = MagicMock()
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.classify_ml(IMAGE_PROMPT)
 
@@ -65,8 +82,8 @@ class TestClassifyMlFastRoute:
     def test_returns_intent_when_confidence_meets_threshold(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        classify = MagicMock(return_value=("summarization", FAST_ROUTE_CONFIDENCE))
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        classify = MagicMock(return_value=_prototype_result("summarization", FAST_ROUTE_CONFIDENCE))
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.classify_ml(FAST_ROUTE_PROMPT)
 
@@ -75,12 +92,15 @@ class TestClassifyMlFastRoute:
         assert result.confidence == FAST_ROUTE_CONFIDENCE
         assert classify.call_count == 1
         classify.assert_called_once_with(FAST_ROUTE_PROMPT)
+        assert "Prototype router match" in result.reason
 
     def test_returns_none_when_confidence_is_below_threshold(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        classify = MagicMock(return_value=("summarization", BELOW_FAST_ROUTE_CONFIDENCE))
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        classify = MagicMock(
+            return_value=_prototype_result("summarization", BELOW_FAST_ROUTE_CONFIDENCE)
+        )
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.classify_ml(FAST_ROUTE_PROMPT)
 
@@ -95,7 +115,7 @@ class TestRouteTaskShortCircuit:
     ) -> None:
         llm = MagicMock()
         classify = MagicMock()
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.route_task(EMPTY_PROMPT, llm)
 
@@ -109,7 +129,7 @@ class TestRouteTaskShortCircuit:
     ) -> None:
         llm = MagicMock()
         classify = MagicMock()
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
 
         result = router.route_task(IMAGE_PROMPT, llm)
 
@@ -124,9 +144,9 @@ class TestRouteTaskFastPath:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         llm = MagicMock()
-        classify = MagicMock(return_value=("summarization", FAST_ROUTE_CONFIDENCE))
+        classify = MagicMock(return_value=_prototype_result("summarization", FAST_ROUTE_CONFIDENCE))
         trace_route = MagicMock()
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
         monkeypatch.setattr("src.router.trace.route", trace_route)
 
         result = router.route_task(FAST_ROUTE_PROMPT, llm)
@@ -140,6 +160,45 @@ class TestRouteTaskFastPath:
         trace_route.assert_called_once_with(result.intent, result.confidence, "ml")
 
 
+class TestRouterProtectedBaselineExamples:
+    @pytest.mark.parametrize(
+        ("prompt", "expected_intent"),
+        [
+            ("resuma este texto para mim", "summarization"),
+            ("latest news about ai", "function_calling"),
+            ("oi", "general"),
+            ("classify this sentiment", "classification"),
+        ],
+    )
+    def test_classify_ml_keeps_current_fast_path_examples(
+        self, prompt: str, expected_intent: str
+    ) -> None:
+        result = router.classify_ml(prompt)
+
+        assert result is not None
+        assert result.intent == expected_intent
+        assert result.confidence >= FAST_ROUTE_CONFIDENCE
+
+
+class TestRouterTargetImprovementExamples:
+    @pytest.mark.parametrize(
+        ("prompt", "expected_intent"),
+        [
+            ("could you make this shorter?", "summarization"),
+            ("can you shorten this article for me?", "summarization"),
+            ("pode resumir isso?", "summarization"),
+        ],
+    )
+    def test_classify_ml_improves_paraphrase_and_portuguese_recall(
+        self, prompt: str, expected_intent: str
+    ) -> None:
+        result = router.classify_ml(prompt)
+
+        assert result is not None
+        assert result.intent == expected_intent
+        assert result.confidence >= FAST_ROUTE_CONFIDENCE
+
+
 class TestRouteTaskLlmFallback:
     def test_instantiates_request_and_returns_llm_result_when_confidence_is_accepted(
         self, monkeypatch: pytest.MonkeyPatch
@@ -151,10 +210,12 @@ class TestRouteTaskLlmFallback:
         )
         llm = MagicMock()
         llm.structured.return_value = expected
-        classify = MagicMock(return_value=("general", BELOW_FAST_ROUTE_CONFIDENCE))
+        classify = MagicMock(
+            return_value=_prototype_result("general", BELOW_FAST_ROUTE_CONFIDENCE, "hello")
+        )
         trace_route = MagicMock()
         llm_request_class = MagicMock(return_value=LLM_REQUEST)
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
         monkeypatch.setattr("src.router.trace.route", trace_route)
         monkeypatch.setattr(router, "LLMRequest", llm_request_class)
 
@@ -180,10 +241,12 @@ class TestRouteTaskLlmFallback:
         )
         llm = MagicMock()
         llm.structured.return_value = llm_result
-        classify = MagicMock(return_value=("general", BELOW_FAST_ROUTE_CONFIDENCE))
+        classify = MagicMock(
+            return_value=_prototype_result("general", BELOW_FAST_ROUTE_CONFIDENCE, "hello")
+        )
         trace_route = MagicMock()
         llm_request_class = MagicMock(return_value=LLM_REQUEST)
-        monkeypatch.setattr(router._ml_router, "classify", classify)
+        monkeypatch.setattr(router._ml_router, "classify_with_details", classify)
         monkeypatch.setattr("src.router.trace.route", trace_route)
         monkeypatch.setattr(router, "LLMRequest", llm_request_class)
 

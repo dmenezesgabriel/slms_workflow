@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
+from io import StringIO
+from typing import Any
 
 from pydantic import BaseModel
+from rich.console import Console
 
 import src.main as main_module
 
@@ -21,6 +25,9 @@ class _StubOrchestrator:
 
 
 class _StubUI:
+    def __init__(self) -> None:
+        self.console = Console(file=StringIO(), force_terminal=False, no_color=True)
+
     def help(self, commands: object) -> None:
         return None
 
@@ -39,7 +46,7 @@ class _StubUI:
     def user_message(self, value: str) -> None:
         return None
 
-    def run_with_status(self, status: str, execute: object) -> object:
+    def run_with_status(self, status: str, execute: Callable[[], object]) -> object:
         return execute()
 
 
@@ -63,7 +70,39 @@ def test_conversation_context_keeps_short_pronoun_follow_up() -> None:
     assert "OpenAI" in context
 
 
-def test_run_builds_default_llm_client_from_bootstrap(monkeypatch) -> None:
+def test_conversation_context_keeps_explicit_follow_up_phrase() -> None:
+    turns = [("Tell me about OpenAI", "OpenAI is an AI company.")]
+
+    context = main_module._conversation_context("tell me more", turns)
+
+    assert context is not None
+    assert "OpenAI" in context
+
+
+def test_conversation_context_returns_none_without_prior_turns() -> None:
+    context = main_module._conversation_context("what about its history?", [])
+
+    assert context is None
+
+
+def test_conversation_context_rejects_ambiguous_short_that_follow_up() -> None:
+    turns = [("Tell me about OpenAI", "OpenAI is an AI company.")]
+
+    context = main_module._conversation_context("what about that?", turns)
+
+    assert context is None
+
+
+def test_conversation_context_keeps_short_pronoun_follow_up_with_topic_word() -> None:
+    turns = [("Tell me about OpenAI", "OpenAI is an AI company.")]
+
+    context = main_module._conversation_context("what about its leadership?", turns)
+
+    assert context is not None
+    assert "OpenAI" in context
+
+
+def test_run_builds_default_llm_client_from_bootstrap(monkeypatch: Any) -> None:
     orchestrator = _StubOrchestrator()
     default_llm = object()
 
@@ -72,11 +111,12 @@ def test_run_builds_default_llm_client_from_bootstrap(monkeypatch) -> None:
 
     result = main_module.run("hello")
 
+    assert isinstance(result, _Result)
     assert result.answer == "ok"
     assert orchestrator.calls == [("hello", default_llm, None)]
 
 
-def test_main_uses_bootstrap_llm_factory_for_cli_prompt(monkeypatch, capsys) -> None:
+def test_main_uses_bootstrap_llm_factory_for_cli_prompt(monkeypatch: Any, capsys: Any) -> None:
     dispatch_calls: list[tuple[str, object]] = []
     default_llm = object()
 

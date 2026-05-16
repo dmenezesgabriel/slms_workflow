@@ -1,0 +1,11 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "follow_up_detection",
+  "cases": [
+    {"id": "followup-heldout-protected-pronoun-organization", "cohort": "protected", "prompt": "when was it founded?", "turns": [{"user": "Tell me about OpenAI", "assistant": "OpenAI is an AI research company."}], "expected_use_context": true},
+    {"id": "followup-heldout-protected-explicit", "cohort": "protected", "prompt": "same topic, but focus on pricing", "turns": [{"user": "Tell me about ChatGPT Team", "assistant": "It is a collaboration plan for teams."}], "expected_use_context": true},
+    {"id": "followup-heldout-target-false-link-trap", "cohort": "target_improvement", "prompt": "what about this city?", "turns": [{"user": "Tell me about OpenAI", "assistant": "OpenAI is an AI company."}], "expected_use_context": false},
+    {"id": "followup-heldout-target-clean-topic-shift", "cohort": "target_improvement", "prompt": "tell me about Lisbon instead", "turns": [{"user": "Tell me about OpenAI", "assistant": "OpenAI is an AI company."}], "expected_use_context": false}
+  ]
+}

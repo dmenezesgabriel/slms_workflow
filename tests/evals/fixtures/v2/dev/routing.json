@@ -1,0 +1,17 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "routing",
+  "cases": [
+    {"id": "routing-dev-protected-summarization-pt", "cohort": "protected", "prompt": "resuma este texto para mim", "expected_intent": "summarization"},
+    {"id": "routing-dev-protected-function-calling-news", "cohort": "protected", "prompt": "latest news about ai", "expected_intent": "function_calling"},
+    {"id": "routing-dev-protected-general-thanks", "cohort": "protected", "prompt": "thanks for the help", "expected_intent": "general"},
+    {"id": "routing-dev-protected-classification", "cohort": "protected", "prompt": "classify this sentiment", "expected_intent": "classification"},
+    {"id": "routing-dev-protected-question-answering", "cohort": "protected", "prompt": "what is docker?", "expected_intent": "question_answering"},
+    {"id": "routing-dev-protected-image", "cohort": "protected", "prompt": "describe this photo", "expected_intent": "image_understanding"},
+    {"id": "routing-dev-target-shorter-paraphrase", "cohort": "target_improvement", "prompt": "could you make this shorter?", "expected_intent": "summarization"},
+    {"id": "routing-dev-target-shorten-article", "cohort": "target_improvement", "prompt": "can you shorten this article for me?", "expected_intent": "summarization"},
+    {"id": "routing-dev-target-portuguese-paraphrase", "cohort": "target_improvement", "prompt": "pode resumir esse paragrafo?", "expected_intent": "summarization"},
+    {"id": "routing-dev-target-gist-near-miss", "cohort": "target_improvement", "prompt": "i need the gist of this memo", "expected_intent": "summarization"}
+  ]
+}

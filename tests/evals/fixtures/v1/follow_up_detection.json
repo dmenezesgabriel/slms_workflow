@@ -1,0 +1,49 @@
+{
+  "version": "v1",
+  "capability": "follow_up_detection",
+  "cases": [
+    {
+      "id": "followup-protected-pronoun",
+      "cohort": "protected",
+      "prompt": "what about its history?",
+      "turns": [
+        {
+          "user": "Tell me about OpenAI",
+          "assistant": "OpenAI is an AI company."
+        }
+      ],
+      "expected_use_context": true
+    },
+    {
+      "id": "followup-protected-explicit-followup",
+      "cohort": "protected",
+      "prompt": "tell me more",
+      "turns": [
+        {
+          "user": "Tell me about OpenAI",
+          "assistant": "OpenAI is an AI company."
+        }
+      ],
+      "expected_use_context": true
+    },
+    {
+      "id": "followup-protected-no-prior-turns",
+      "cohort": "protected",
+      "prompt": "what about its history?",
+      "turns": [],
+      "expected_use_context": false
+    },
+    {
+      "id": "followup-target-ambiguous-that",
+      "cohort": "target_improvement",
+      "prompt": "what about that?",
+      "turns": [
+        {
+          "user": "Tell me about OpenAI",
+          "assistant": "OpenAI is an AI company."
+        }
+      ],
+      "expected_use_context": false
+    }
+  ]
+}

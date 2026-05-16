@@ -1,0 +1,14 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "follow_up_detection",
+  "cases": [
+    {"id": "followup-dev-protected-pronoun", "cohort": "protected", "prompt": "what about its history?", "turns": [{"user": "Tell me about OpenAI", "assistant": "OpenAI is an AI company."}], "expected_use_context": true},
+    {"id": "followup-dev-protected-explicit-followup", "cohort": "protected", "prompt": "tell me more", "turns": [{"user": "Tell me about OpenAI", "assistant": "OpenAI is an AI company."}], "expected_use_context": true},
+    {"id": "followup-dev-protected-no-prior-turns", "cohort": "protected", "prompt": "what about its history?", "turns": [], "expected_use_context": false},
+    {"id": "followup-dev-protected-pronoun-topic", "cohort": "protected", "prompt": "is it open source?", "turns": [{"user": "Tell me about spaCy", "assistant": "spaCy is an NLP library."}], "expected_use_context": true},
+    {"id": "followup-dev-target-ambiguous-that", "cohort": "target_improvement", "prompt": "what about that?", "turns": [{"user": "Tell me about OpenAI", "assistant": "OpenAI is an AI company."}], "expected_use_context": false},
+    {"id": "followup-dev-target-topic-shift", "cohort": "target_improvement", "prompt": "switch topics: tell me about Lisbon", "turns": [{"user": "Tell me about spaCy", "assistant": "spaCy is an NLP library."}], "expected_use_context": false},
+    {"id": "followup-dev-target-continue-deployment", "cohort": "target_improvement", "prompt": "continue with deployment steps", "turns": [{"user": "How do I deploy FastAPI?", "assistant": "You can use uvicorn and a reverse proxy."}], "expected_use_context": true}
+  ]
+}

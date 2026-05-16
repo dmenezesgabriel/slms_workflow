@@ -1,0 +1,24 @@
+{
+  "version": "v1",
+  "capability": "summarization_guard",
+  "cases": [
+    {
+      "id": "summarization-protected-no-content",
+      "cohort": "protected",
+      "prompt": "summarize this text for me",
+      "expected_blocked": true
+    },
+    {
+      "id": "summarization-protected-content-present",
+      "cohort": "protected",
+      "prompt": "summarize important word important word important word important word important word",
+      "expected_blocked": false
+    },
+    {
+      "id": "summarization-target-valid-short-input",
+      "cohort": "target_improvement",
+      "prompt": "summarize short but valid memo",
+      "expected_blocked": false
+    }
+  ]
+}

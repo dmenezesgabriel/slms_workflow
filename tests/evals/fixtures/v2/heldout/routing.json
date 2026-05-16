@@ -1,0 +1,11 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "routing",
+  "cases": [
+    {"id": "routing-heldout-protected-news-search", "cohort": "protected", "prompt": "search for latest news about openai", "expected_intent": "function_calling"},
+    {"id": "routing-heldout-protected-qa", "cohort": "protected", "prompt": "what can you tell me about neural networks?", "expected_intent": "question_answering"},
+    {"id": "routing-heldout-target-summary-passage", "cohort": "target_improvement", "prompt": "give me a short summary of this passage", "expected_intent": "summarization"},
+    {"id": "routing-heldout-target-summary-pt", "cohort": "target_improvement", "prompt": "resuma esse texto rapidamente", "expected_intent": "summarization"}
+  ]
+}

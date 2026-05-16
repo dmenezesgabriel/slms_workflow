@@ -45,6 +45,7 @@ class TestProperNounFallback:
         [
             ("What is spaCy?", "spaCy"),
             ("What is FastAPI?", "FastAPI"),
+            ("what is spacy?", "spacy"),
             ("what is the capital of France", None),
         ],
     )
@@ -87,11 +88,48 @@ class TestDefaultRetriever:
         mock_fetch.execute.assert_called_once_with({"url": "https://example.com"})
         compress.assert_called_once()
 
+    def test_protected_baseline_fetches_direct_what_is_entity_from_wikipedia(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_wikipedia = MagicMock()
+        mock_wikipedia.execute.return_value = "spaCy is an NLP library."
+        compress = MagicMock(return_value="compressed wiki context")
+        monkeypatch.setattr("src.retrievers.default.context.compress", compress)
+        monkeypatch.setattr(
+            "src.retrievers.default.ner.best_lookup_entity", MagicMock(return_value=None)
+        )
+
+        result = _make_retriever(wikipedia=mock_wikipedia).fetch_context("What is spaCy?")
+
+        assert result == "compressed wiki context"
+        mock_wikipedia.execute.assert_called_once_with({"query": "spaCy"})
+        compress.assert_called_once_with(
+            "spaCy is an NLP library.",
+            query="What is spaCy?",
+            max_sentences=6,
+        )
+
+    def test_target_improvement_lowercase_direct_what_is_prompt_uses_wikipedia(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_wikipedia = MagicMock()
+        mock_wikipedia.execute.return_value = "spaCy is an NLP library."
+        compress = MagicMock(return_value="compressed wiki context")
+        monkeypatch.setattr("src.retrievers.default.context.compress", compress)
+        monkeypatch.setattr(
+            "src.retrievers.default.ner.best_lookup_entity", MagicMock(return_value=None)
+        )
+
+        result = _make_retriever(wikipedia=mock_wikipedia).fetch_context("what is spacy?")
+
+        assert result == "compressed wiki context"
+        mock_wikipedia.execute.assert_called_once_with({"query": "spacy"})
+
     def test_returns_empty_context_when_no_retrieval_path_matches(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "src.retrievers.default.ner.lookup_entities", MagicMock(return_value=[])
+            "src.retrievers.default.ner.best_lookup_entity", MagicMock(return_value=None)
         )
 
         result = _make_retriever().fetch_context("hello there")
@@ -129,8 +167,8 @@ class TestDefaultRetriever:
         compress = MagicMock(return_value="compressed search context")
         monkeypatch.setattr("src.retrievers.default.context.compress", compress)
         monkeypatch.setattr(
-            "src.retrievers.default.ner.lookup_entities",
-            MagicMock(return_value=[MagicMock(text="Python", label="MISC")]),
+            "src.retrievers.default.ner.best_lookup_entity",
+            MagicMock(return_value=MagicMock(text="Python", label="MISC")),
         )
         monkeypatch.setattr("src.retrievers.default.ner.is_temporal", MagicMock(return_value=False))
 
@@ -140,7 +178,7 @@ class TestDefaultRetriever:
         assert result == "compressed search context"
         mock_search.execute.assert_called_once_with(
             {
-                "query": "Python programming language first released Guido van Rossum",
+                "query": "Python programming language creator first released",
                 "max_results": 3,
             }
         )

@@ -34,11 +34,22 @@ class QuestionAnsweringHandler:
     def handle(self, user_input: str, llm: LLMClient) -> QuestionAnsweringResult:
         trace.handler("question_answering", user_input)
         trace.span_enter("question_answering")
-        retrieved = self._retriever.fetch_context(user_input)
 
-        user_message = (
-            f"Context:\n{retrieved}\n\nQuestion: {user_input}" if retrieved else user_input
-        )
+        if "\n\nQuestion: " in user_input:
+            ctx_part, q_part = user_input.rsplit("\n\nQuestion: ", 1)
+            original_query = q_part.strip()
+            retrieved = self._retriever.fetch_context(original_query)
+            if retrieved:
+                user_message = (
+                    f"{ctx_part}\n\nAdditional context:\n{retrieved}\n\nQuestion: {original_query}"
+                )
+            else:
+                user_message = user_input
+        else:
+            retrieved = self._retriever.fetch_context(user_input)
+            user_message = (
+                f"Context:\n{retrieved}\n\nQuestion: {user_input}" if retrieved else user_input
+            )
 
         result = llm.structured(
             LLMRequest(

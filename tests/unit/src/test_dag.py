@@ -84,6 +84,9 @@ def test_skips_branch_when_condition_does_not_match() -> None:
 
     assert result is None
     assert trace.nodes == {}
+    assert len(trace.skipped_nodes) == 1
+    assert trace.skipped_nodes[0]["node_id"] == "url_only"
+    assert trace.skipped_nodes[0]["condition"] == "if_query_has_url"
 
 
 def test_runs_nodes_with_injectable_executor() -> None:
@@ -166,6 +169,55 @@ def test_custom_condition_is_respected() -> None:
     calls.clear()
     result, trace = run_dag_workflow(graph, "this is a very long query", MagicMock())
     assert calls == []
+
+
+def test_composed_dag_tool_output_flows_to_final_answer() -> None:
+    TOOL_RESULT = (
+        "llama.cpp is a C/C++ implementation of LLM inference. "
+        "It supports 4-bit quantization and runs on CPU. "
+        "Great for local AI experiments."
+    )
+
+    class _ToolNode:
+        id = "function_calling"
+
+        def execute(self, input: str, llm: LLMClient) -> FinalAnswer:
+            return FinalAnswer(answer=f"web_search result: {TOOL_RESULT}")
+
+    class _QANode:
+        id = "question_answering"
+
+        def execute(self, input: str, llm: LLMClient) -> FinalAnswer:
+            return FinalAnswer(answer=f"Based on context: {input}")
+
+    graph = WorkflowGraph(
+        name="on_demand_web_search_to_question_answering",
+        description="Composed from the user's prompt by the unified assistant.",
+        nodes=(
+            GraphNode("tool", _ToolNode(), "{query}"),
+            GraphNode(
+                "final",
+                _QANode(),
+                "Context:\n{tool}\n\nQuestion: {query}",
+                depends_on=("tool",),
+            ),
+        ),
+        final_node="final",
+    )
+
+    result, trace = run_graph(
+        graph,
+        "search for llama.cpp and tell me what it is",
+        MagicMock(),
+    )
+
+    assert result is not None
+    answer = result.model_dump().get("answer", "")
+    assert "C/C++" in answer, f"Expected tool content in answer, got: {answer!r}"
+    assert "llama.cpp" in answer, f"Expected llama.cpp in answer, got: {answer!r}"
+    assert trace.nodes["tool"].output == "web_search result: " + TOOL_RESULT
+    assert "Context:" in trace.nodes["final"].input_
+    assert "Question:" in trace.nodes["final"].input_
 
 
 def test_rejects_cycles() -> None:

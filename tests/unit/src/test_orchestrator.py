@@ -5,10 +5,13 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel
 
+from src.dag import run_graph
+from src.graph.base import NodeRegistry
 from src.llm_client import LLMClient
-from src.nodes.base import NodeRegistry, WorkflowNode
+from src.nodes.base import WorkflowNode
 from src.orchestrator import Orchestrator
 from src.schemas import FinalAnswer
+from src.text_utils import extract_text
 from src.tools import ToolRegistry
 from src.tools.base import Tool
 
@@ -121,6 +124,56 @@ def test_entity_relation_returns_single_node_dag(
     assert len(plan.nodes) == 1
     assert plan.nodes[0].node.id == "question_answering"
     assert route_task.call_count == 1
+
+
+def test_orchestrated_composed_search_to_qa_produces_substantive_answer() -> None:
+    """Previously broken prompt: 'search for llama.cpp and tell me what it is'.
+
+    Proves the full compose → DAG execute path passes tool output
+    through to the final answer with substantive content.
+    """
+    TOOL_RESULT = (
+        "llama.cpp is a C/C++ implementation of LLM inference. "
+        "It supports 4-bit quantization and runs on CPU. "
+        "Great for running local AI models on consumer hardware."
+    )
+
+    class _MockToolNode:
+        id = "function_calling"
+
+        def execute(self, input: str, llm: LLMClient) -> FinalAnswer:
+            return FinalAnswer(answer=f"web_search result: {TOOL_RESULT}")
+
+    class _MockQANode:
+        id = "question_answering"
+
+        def execute(self, input: str, llm: LLMClient) -> FinalAnswer:
+            return FinalAnswer(answer=f"Based on context: {input}")
+
+    node_registry = NodeRegistry([_MockToolNode(), _MockQANode()])
+    tool_registry = _build_tool_registry("web_search")
+    orchestrator = Orchestrator(
+        node_registry=node_registry,
+        tool_registry=tool_registry,
+    )
+
+    graph = orchestrator.compose_dag("search for llama.cpp and tell me what it is")
+    assert graph is not None
+    assert graph.name == "on_demand_web_search_to_question_answering"
+
+    result, trace = run_graph(
+        graph,
+        "search for llama.cpp and tell me what it is",
+        MagicMock(),
+    )
+
+    assert result is not None
+    answer = extract_text(result)
+    assert "C/C++" in answer, f"Expected tool content in answer, got: {answer!r}"
+    assert "llama.cpp" in answer, f"Expected llama.cpp in final answer, got: {answer!r}"
+    assert trace.nodes["tool"].output == "web_search result: " + TOOL_RESULT
+    assert "Context:" in trace.nodes["final"].input_
+    assert "Question:" in trace.nodes["final"].input_
 
 
 def test_node_registry_resolve_returns_specific_node_before_fallback() -> None:

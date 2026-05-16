@@ -57,7 +57,7 @@ DagNode = GraphNode
 DagWorkflow = WorkflowGraph
 
 
-_MAX_NODE_INPUT_CHARS = 900
+_MAX_NODE_INPUT_CHARS = 4000
 
 
 def run_graph(
@@ -86,38 +86,50 @@ def run_graph(
 
     order = _topological_order(graph)
     exec_trace = ExecutionTrace(workflow_name=graph.name)
+    trace.set_exec_trace(exec_trace)
 
-    for node_id in order:
-        node = _node_by_id(graph, node_id)
-        if not _condition_matches(node.condition, user_input, graph.conditions):
-            trace.dag_skip_node(node_id, node.condition)
-            continue
+    try:
+        for node_id in order:
+            node = _node_by_id(graph, node_id)
+            if not _condition_matches(node.condition, user_input, graph.conditions):
+                trace.dag_skip_node(node_id, node.condition)
+                exec_trace.skipped_nodes.append(
+                    {
+                        "node_id": node_id,
+                        "condition": node.condition,
+                        "reason": f"condition '{node.condition}' did not match",
+                    }
+                )
+                continue
 
-        node_input = ctx.render(node.input_format)
-        if len(node_input) > _MAX_NODE_INPUT_CHARS:
-            node_input = node_input[:_MAX_NODE_INPUT_CHARS]
+            node_input = ctx.render(node.input_format)
+            if len(node_input) > _MAX_NODE_INPUT_CHARS:
+                node_input = node_input[:_MAX_NODE_INPUT_CHARS]
 
-        t0 = time.monotonic()
-        error: str | None = None
-        try:
-            trace.dag_exec_node(node_id, node.node.id)
-            result = node.node.execute(node_input, llm)
-        except Exception as exc:
-            result = None
-            error = str(exc)
-        elapsed = (time.monotonic() - t0) * 1000
+            t0 = time.monotonic()
+            error: str | None = None
+            try:
+                trace.dag_exec_node(node_id, node.node.id)
+                result = node.node.execute(node_input, llm)
+            except Exception as exc:
+                result = None
+                error = str(exc)
+            elapsed = (time.monotonic() - t0) * 1000
 
-        if result is not None:
-            ctx.record(node.id, result)
+            if result is not None:
+                ctx.record(node.id, result)
 
-        exec_trace.nodes[node.id] = NodeTrace(
-            node_id=node.id,
-            intent=node.node.id,
-            input_=node_input,
-            output=_extract(result) if result is not None else "",
-            elapsed_ms=round(elapsed, 1),
-            error=error,
-        )
+            exec_trace.nodes[node.id] = NodeTrace(
+                node_id=node.id,
+                intent=node.node.id,
+                input_=node_input,
+                output=_extract(result) if result is not None else "",
+                elapsed_ms=round(elapsed, 1),
+                error=error,
+            )
+            exec_trace.node_order.append(node_id)
+    finally:
+        trace.set_exec_trace(None)
 
     final_id = graph.final_node or (order[-1] if order else None)
     if final_id and final_id in ctx.results:

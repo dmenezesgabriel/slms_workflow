@@ -8,19 +8,14 @@ Used for:
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from rapidfuzz import fuzz, process
 
+from src.text_normalization import normalize_lookup_query
+
 # Minimum similarity score (0–100) to accept a fuzzy workflow match.
 _WORKFLOW_THRESHOLD = 72
-
-# Leading articles to strip for cleaner entity queries (en + pt).
-_ARTICLE_RE = re.compile(
-    r"^(?:the|a|an|o|a|os|as|um|uma)\s+",
-    re.IGNORECASE,
-)
 
 
 def match_workflow(name: str, registry: dict[str, Any]) -> str | None:
@@ -42,5 +37,4 @@ def match_workflow(name: str, registry: dict[str, Any]) -> str | None:
 
 def normalize_query(text: str) -> str:
     """Strip leading articles and trailing punctuation for cleaner lookup queries."""
-    text = text.strip(" .,!?")
-    return _ARTICLE_RE.sub("", text).strip()
+    return normalize_lookup_query(text)

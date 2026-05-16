@@ -1,0 +1,11 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "retrieval_strategy",
+  "cases": [
+    {"id": "retrieval-heldout-protected-url-fetch", "cohort": "protected", "prompt": "open https://example.com/reference", "expected_strategy": "url_fetch"},
+    {"id": "retrieval-heldout-protected-time-sensitive", "cohort": "protected", "prompt": "recent news about openai", "expected_strategy": "time_sensitive"},
+    {"id": "retrieval-heldout-target-concept", "cohort": "target_improvement", "prompt": "explain dependency inversion principle", "expected_strategy": "concept_lookup"},
+    {"id": "retrieval-heldout-target-entity", "cohort": "target_improvement", "prompt": "where is lisbon located", "expected_strategy": "entity_lookup"}
+  ]
+}

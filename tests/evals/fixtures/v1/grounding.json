@@ -1,0 +1,38 @@
+{
+  "version": "v1",
+  "capability": "grounding",
+  "cases": [
+    {
+      "id": "grounding-protected-supported-numeric",
+      "cohort": "protected",
+      "context": "Python was first released in 1991. Guido van Rossum created it.",
+      "answer": "Python was first released in 1991 and Guido van Rossum created it.",
+      "expected_passed": true,
+      "expected_unsupported_claim_detected": false
+    },
+    {
+      "id": "grounding-protected-unsupported-numeric",
+      "cohort": "protected",
+      "context": "Python was first released in 1991. Guido van Rossum created it.",
+      "answer": "Python was first released in 1989 and Guido van Rossum created it.",
+      "expected_passed": false,
+      "expected_unsupported_claim_detected": true
+    },
+    {
+      "id": "grounding-protected-overconfident-unsupported",
+      "cohort": "protected",
+      "context": "The source says OpenAI released a new model update this week.",
+      "answer": "OpenAI definitely launched a robotics platform and always planned it this way.",
+      "expected_passed": false,
+      "expected_unsupported_claim_detected": true
+    },
+    {
+      "id": "grounding-target-paraphrase-support",
+      "cohort": "target_improvement",
+      "context": "OpenAI introduced a fresh model update this week.",
+      "answer": "OpenAI released a new model this week.",
+      "expected_passed": true,
+      "expected_unsupported_claim_detected": false
+    }
+  ]
+}

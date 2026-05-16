@@ -1,0 +1,11 @@
+{
+  "version": "v2",
+  "split": "heldout",
+  "capability": "tool_selection",
+  "cases": [
+    {"id": "tool-heldout-protected-wikipedia-search", "cohort": "protected", "prompt": "find ada lovelace on wikipedia", "expected_tool": "wikipedia", "expected_argument_key": "query", "expected_argument_contains": "ada lovelace"},
+    {"id": "tool-heldout-protected-fetch-open", "cohort": "protected", "prompt": "open https://example.com/docs", "expected_tool": "web_fetch", "expected_argument_key": "url", "expected_argument_contains": "https://example.com/docs"},
+    {"id": "tool-heldout-target-portuguese-news-search", "cohort": "target_improvement", "prompt": "procure por noticias recentes sobre openai", "expected_tool": "web_search", "expected_argument_key": "query", "expected_argument_contains": "openai"},
+    {"id": "tool-heldout-target-qa-entity", "cohort": "target_improvement", "prompt": "quem e Ada Lovelace", "expected_tool": "wikipedia", "expected_argument_key": "query", "expected_argument_contains": "Ada Lovelace"}
+  ]
+}

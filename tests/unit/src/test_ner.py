@@ -126,6 +126,15 @@ class TestLookupEntities:
         extract.assert_called_once_with(text)
 
 
+class TestBestLookupEntity:
+    def test_prefers_more_specific_entity_when_multiple_candidates_overlap(self) -> None:
+        entities = [Entity(text="Ada", label="PER"), Entity(text="Ada Lovelace", label="PER")]
+
+        result = ner.best_lookup_entity("tell me about Ada Lovelace", entities)
+
+        assert result == entities[1]
+
+
 class TestNERModule:
     def test_canonical_imports_work(self) -> None:
         from src.techniques.ner import Entity, EntityExtractor, extract, is_temporal

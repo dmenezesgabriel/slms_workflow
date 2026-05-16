@@ -41,6 +41,122 @@ uv run python -m src.main --list-workflows  # show predefined workflow graphs
 Set `SLM_TRACE=1` to see the selected plan, graph node execution/skips, workflow steps,
 tool calls, and agent steps on stderr.
 
+## Lexical routing and heuristic architecture
+
+The fast path is now built around shared deterministic lexical scoring instead of duplicated
+module-local phrase gates.
+
+Core shared modules:
+- `src/text_normalization.py`
+  - casefolding
+  - diacritic folding
+  - punctuation cleanup
+  - tokenization
+  - normalized lookup-query cleanup
+- `src/lexical_scoring.py`
+  - token overlap
+  - RapidFuzz similarity
+  - char n-gram TF-IDF similarity
+  - combined lexical score helpers
+
+Where the shared layer is used:
+- `src/router.py`
+  - scores user input against centralized intent prototypes in `src/router_prototypes.py`
+  - returns a fast deterministic route when `_FAST_ROUTE_THRESHOLD` is met
+  - falls back to the LLM router only when lexical confidence is too low
+- `src/tool_selection.py`
+  - ranks tool candidates using lexical prototypes, regex signals, and NER/entity cues
+  - keeps deterministic math extraction and URL fetch handling as explicit fast paths
+- `src/techniques/retrieval.py` and `src/retrievers/default.py`
+  - choose retrieval strategy through scored planning instead of brittle branch-heavy string hacks
+- `src/main.py`
+  - uses shared token/lexical overlap helpers for follow-up and conversation-context decisions
+- `src/handlers/summarization.py` and `src/techniques/grounding.py`
+  - use normalized lexical checks for short-input validation and support/faithfulness checks
+
+## Threshold and fallback ownership
+
+Tune thresholds in the module that owns the decision surface instead of scattering literals:
+- `src/router.py`
+  - `_FAST_ROUTE_THRESHOLD`: minimum lexical score for fast intent routing
+  - `_LLM_FALLBACK_THRESHOLD`: minimum LLM confidence before accepting the structured router result
+- `src/handlers/summarization.py`
+  - `_CONTENTLESS_MATCH_THRESHOLD` and related minimum-content constants control summarization guards
+- `evals/quality_gate.py`
+  - `DEFAULT_THRESHOLDS` defines benchmark gates for protected accuracy, target-improvement deltas,
+    false-link tolerance, valid-short-input rejection, and answer-quality coverage floors
+  - changing thresholds is a dataset-ownership decision: update the rationale together with the fixture version
+
+Decision policy:
+- prefer deterministic lexical decisions first
+- fall back to the LLM only when deterministic confidence is below the owned threshold
+- accept benchmark changes only when protected cases do not regress beyond the configured gates
+- do not silently rewrite historical fixture expectations in place; introduce a new dataset version when semantics materially change
+
+## Validation workflow
+
+### Quick local checks
+
+`pytest` follows the repo default in `pyproject.toml` and skips `integration`-marked tests unless you ask for them explicitly.
+
+```sh
+uv run ruff check .
+uv run mypy .
+uv run pytest
+```
+
+### Formatting
+
+```sh
+uv run ruff format .
+```
+
+### Integration tests
+
+Integration tests require the local llama.cpp server from `server_config.json`.
+
+```sh
+uv run python -m llama_cpp.server --config_file server_config.json
+uv run pytest -m integration
+```
+
+### Frozen quality benchmark
+
+The metric gate now has two layers:
+- `v1`: the original focused regression benchmark used for before/after comparisons against the frozen baseline
+- `v2`: the hardened benchmark with `dev` and `heldout` splits, answer-level reporting, richer follow-up fixtures, and captured-model-output checks
+
+Key files:
+- `tests/evals/fixtures/v1/`
+- `tests/evals/fixtures/v2/dev/`
+- `tests/evals/fixtures/v2/heldout/`
+- `evals/quality_gate.py`
+- `scripts/run_eval.py`
+
+```sh
+# Legacy frozen baseline workflow
+uv run python scripts/run_eval.py --dataset-version v1 --label latest
+uv run python scripts/run_eval.py --dataset-version v1 --label candidate --compare-to artifacts/evals/baseline-v1.json
+
+# Hardened benchmark across visible + held-out fixtures
+uv run python scripts/run_eval.py --dataset-version v2 --split all --label benchmark-hardening
+uv run python scripts/run_eval.py --dataset-version v2 --split heldout --label heldout-check
+```
+
+Benchmark reports are written to `artifacts/evals/`. See `artifacts/evals/README.md` for naming,
+metrics, split handling, threshold rationale, and current automation gaps.
+
+### CI-friendly full pass
+
+```sh
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy .
+uv run pytest
+uv run pytest -m integration
+uv run python scripts/run_eval.py --label ci --compare-to artifacts/evals/baseline-v1.json
+```
+
 ## Evaluation and integration checks
 
 ```sh

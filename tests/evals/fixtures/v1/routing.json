@@ -1,0 +1,42 @@
+{
+  "version": "v1",
+  "capability": "routing",
+  "cases": [
+    {
+      "id": "routing-protected-summarization-pt",
+      "cohort": "protected",
+      "prompt": "resuma este texto para mim",
+      "expected_intent": "summarization"
+    },
+    {
+      "id": "routing-protected-function-calling-news",
+      "cohort": "protected",
+      "prompt": "latest news about ai",
+      "expected_intent": "function_calling"
+    },
+    {
+      "id": "routing-protected-general-pt",
+      "cohort": "protected",
+      "prompt": "oi",
+      "expected_intent": "general"
+    },
+    {
+      "id": "routing-protected-classification",
+      "cohort": "protected",
+      "prompt": "classify this sentiment",
+      "expected_intent": "classification"
+    },
+    {
+      "id": "routing-target-shorter-paraphrase",
+      "cohort": "target_improvement",
+      "prompt": "could you make this shorter?",
+      "expected_intent": "summarization"
+    },
+    {
+      "id": "routing-target-shorten-article-paraphrase",
+      "cohort": "target_improvement",
+      "prompt": "can you shorten this article for me?",
+      "expected_intent": "summarization"
+    }
+  ]
+}

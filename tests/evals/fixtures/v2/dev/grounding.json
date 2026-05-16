@@ -1,0 +1,14 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "grounding",
+  "cases": [
+    {"id": "grounding-dev-protected-supported-numeric", "cohort": "protected", "context": "Python was first released in 1991. Guido van Rossum created it.", "answer": "Python was first released in 1991 and Guido van Rossum created it.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "synthetic"},
+    {"id": "grounding-dev-protected-unsupported-numeric", "cohort": "protected", "context": "Python was first released in 1991. Guido van Rossum created it.", "answer": "Python was first released in 1989 and Guido van Rossum created it.", "expected_passed": false, "expected_unsupported_claim_detected": true, "source_kind": "synthetic"},
+    {"id": "grounding-dev-protected-overconfident-unsupported", "cohort": "protected", "context": "The source says OpenAI released a new model update this week.", "answer": "OpenAI definitely launched a robotics platform and always planned it this way.", "expected_passed": false, "expected_unsupported_claim_detected": true, "source_kind": "synthetic"},
+    {"id": "grounding-dev-target-paraphrase-support", "cohort": "target_improvement", "context": "OpenAI introduced a fresh model update this week.", "answer": "OpenAI released a new model this week.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "synthetic"},
+    {"id": "grounding-dev-real-python-summary", "cohort": "protected", "context": "Python was created by Guido van Rossum and first released in 1991. It is widely used for automation, web development, and data science.", "answer": "Python was created by Guido van Rossum and first released in 1991. It is widely used for automation, web development, and data science.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "captured_model_output"},
+    {"id": "grounding-dev-real-login-summary", "cohort": "protected", "context": "The memo says the login service now retries failed requests twice, logs timeout errors, and shows a clearer message to the user.", "answer": "The memo states that the login service now retries failed requests twice, logs timeout errors, and displays a clearer message to users.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "captured_model_output"},
+    {"id": "grounding-dev-real-lisbon-summary", "cohort": "target_improvement", "context": "Lisbon is the capital of Portugal. It sits on the Tagus River and is known for its hills and trams.", "answer": "Lisbon is the capital of Portugal. It sits on the Tagus River and is known for its hills and trams.", "expected_passed": true, "expected_unsupported_claim_detected": false, "source_kind": "captured_model_output"}
+  ]
+}

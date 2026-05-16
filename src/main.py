@@ -9,12 +9,14 @@ from pydantic import BaseModel
 from src import trace
 from src.agent import run_agent
 from src.bootstrap import build_llm_client, build_node_registry, build_tool_registry
+from src.lexical_scoring import best_lexical_match, token_overlap_score
 from src.llm_client import LLMClient
 from src.model_registry import apply_model_overrides, ensure_model_available, known_model_aliases
 from src.router import Router
 from src.techniques.fuzzy import match_workflow
+from src.text_normalization import tokenize
 from src.text_utils import extract_text
-from src.ui import AssistantUI, CommandHelp
+from src.ui import AssistantUI, CommandHelp, StatusCollector
 from src.workflows.catalog import get_workflow_registry, run_workflow, set_node_registry
 from src.workflows.orchestrator import Dispatch, Orchestrator
 
@@ -62,17 +64,70 @@ _EXPLICIT_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 _PRONOUN_FOLLOW_UP_RE = re.compile(r"\b(it|its|they|them|that|this)\b", re.IGNORECASE)
+_EXPLICIT_CONTEXT_PROTOTYPES = (
+    "tell me more",
+    "explain more",
+    "continue",
+    "same topic",
+    "what about its history",
+    "what about them",
+)
+_FOLLOW_UP_PRONOUNS = {"it", "its", "they", "them", "that", "this"}
+_AMBIGUOUS_DEICTIC_PRONOUNS = {"that", "this"}
+_FOLLOW_UP_STOPWORDS = {
+    "what",
+    "about",
+    "tell",
+    "me",
+    "more",
+    "explain",
+    "continue",
+    "please",
+    "its",
+    "it",
+    "they",
+    "them",
+    "that",
+    "this",
+}
+
+
+def _follow_up_content_tokens(user_input: str) -> set[str]:
+    return {
+        token
+        for token in tokenize(user_input)
+        if token not in _FOLLOW_UP_STOPWORDS and len(token) > 2
+    }
+
+
+def _follow_up_signal_score(user_input: str) -> float:
+    match = best_lexical_match(user_input, list(_EXPLICIT_CONTEXT_PROTOTYPES))
+    return 0.0 if match is None else match.score
 
 
 def _should_use_conversation_context(user_input: str, turns: list[tuple[str, str]]) -> bool:
     if not turns:
         return False
-    if _EXPLICIT_CONTEXT_RE.search(user_input):
+    if _EXPLICIT_CONTEXT_RE.search(user_input) or _follow_up_signal_score(user_input) >= 0.72:
         return True
-    # Short elliptical follow-ups like "what about its history?" benefit from
-    # context. Longer standalone questions containing words like "that movie"
-    # should not inherit unrelated prior turns.
-    return len(user_input.split()) <= 8 and _PRONOUN_FOLLOW_UP_RE.search(user_input) is not None
+
+    tokens = tokenize(user_input)
+    if len(tokens) > 8 or _PRONOUN_FOLLOW_UP_RE.search(user_input) is None:
+        return False
+
+    pronouns = {token for token in tokens if token in _FOLLOW_UP_PRONOUNS}
+    content_tokens = _follow_up_content_tokens(user_input)
+    if not content_tokens:
+        return False
+    if pronouns and pronouns.issubset(_AMBIGUOUS_DEICTIC_PRONOUNS):
+        return False
+
+    last_user, last_answer = turns[-1]
+    topic_overlap = max(
+        token_overlap_score(user_input, last_user),
+        token_overlap_score(user_input, last_answer),
+    )
+    return bool(content_tokens) and (topic_overlap >= 0.05 or len(content_tokens) >= 1)
 
 
 def _conversation_context(
@@ -123,11 +178,19 @@ def _repl(
                 else dispatch(user_input, llm)
             )
 
-        result = (
-            execute()
-            if as_json
-            else ui.run_with_status("planning graph/tools/model path…", execute)
-        )
+        if as_json:
+            result = execute()
+        else:
+            status = StatusCollector(ui.console)
+            status.subscribe()
+            try:
+                result = execute()
+            finally:
+                trace_path = status.trace_hint()
+                if trace_path:
+                    ui.info(f"trace: {trace_path}")
+                status.unsubscribe()
+
         answer = _print_result(result, as_json, None if as_json else ui)
         if use_conversation:
             turns.append((user_input, answer))
@@ -306,11 +369,19 @@ def main() -> None:
         def execute() -> BaseModel:
             return dispatch(args.prompt, llm)
 
-        result = (
-            execute()
-            if args.json
-            else ui.run_with_status("planning graph/tools/model path…", execute)
-        )
+        if args.json:
+            result = execute()
+        else:
+            status = StatusCollector(ui.console)
+            status.subscribe()
+            try:
+                result = execute()
+            finally:
+                trace_path = status.trace_hint()
+                if trace_path:
+                    ui.info(f"trace: {trace_path}")
+                status.unsubscribe()
+
         answer = _print_result(result, args.json, ui if rich_output else None)
         if not args.chat:
             return

@@ -6,7 +6,9 @@ from typing import Literal, Protocol
 
 from src import text_utils as ctx
 from src import trace
+from src.lexical_scoring import combined_lexical_score, token_overlap_score
 from src.techniques import ner
+from src.text_normalization import normalize_text, tokenize
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 _WORD_RE = re.compile(r"\b\w{3,}\b")
@@ -23,6 +25,7 @@ _HEDGING_RE = re.compile(
 )
 
 _CLAIM_GROUNDED_THRESHOLD = 0.4
+_CLAIM_LEXICAL_THRESHOLD = 0.55
 _FAITHFULNESS_PASS_RATIO = 0.6
 
 _ACCEPT_THRESHOLD = 0.75
@@ -58,11 +61,62 @@ def _split_claims(text: str) -> list[str]:
 
 
 def _keyword_overlap(text: str, reference: str) -> float:
-    words = set(_WORD_RE.findall(text.lower()))
-    ref_words = set(_WORD_RE.findall(reference.lower()))
+    words = set(_WORD_RE.findall(normalize_text(text)))
+    ref_words = set(_WORD_RE.findall(normalize_text(reference)))
     if not words:
         return 1.0
     return len(words & ref_words) / len(words)
+
+
+def _split_context_sentences(text: str) -> list[str]:
+    sentences = [s.strip() for s in _SENTENCE_RE.split(text) if s.strip()]
+    return sentences or [text]
+
+
+def _normalized_numbers(text: str) -> set[str]:
+    numbers: set[str] = set()
+    for value in _NUMBER_RE.findall(normalize_text(text)):
+        digits_only = value.replace(",", "").replace(".", "")
+        numbers.add(digits_only or value)
+    return numbers
+
+
+def _named_entity_overlap(claim: str, sentence: str) -> float:
+    claim_entities = {
+        entity.text.casefold()
+        for entity in ner.extract(claim)
+        if entity.label in _SCRUB_LABELS or entity.label == "DATE"
+    }
+    if not claim_entities:
+        return 0.0
+    sentence_lower = sentence.casefold()
+    matched = sum(1 for entity in claim_entities if entity in sentence_lower)
+    return matched / len(claim_entities)
+
+
+def _best_claim_support(claim: str, context: str) -> tuple[float, str]:
+    best_score = 0.0
+    best_sentence = context
+    claim_tokens = tokenize(claim)
+    for sentence in _split_context_sentences(context):
+        lexical = combined_lexical_score(claim, sentence)
+        keyword = _keyword_overlap(claim, sentence)
+        token_overlap = token_overlap_score(claim, sentence)
+        entity_overlap = _named_entity_overlap(claim, sentence)
+        length_boost = 0.05 if len(claim_tokens) <= 8 and token_overlap >= 0.3 else 0.0
+        support = max(
+            lexical.score,
+            keyword,
+            (0.45 * lexical.score)
+            + (0.2 * keyword)
+            + (0.2 * token_overlap)
+            + (0.15 * entity_overlap)
+            + length_boost,
+        )
+        if support > best_score:
+            best_score = support
+            best_sentence = sentence
+    return min(1.0, best_score), best_sentence
 
 
 class ConfidenceCheck:
@@ -90,9 +144,13 @@ class FaithfulnessCheck:
         claims = _split_claims(answer)
         if not claims:
             return CheckResult(passed=True, score=1.0)
-        grounded = sum(
-            1 for c in claims if _keyword_overlap(c, context) >= _CLAIM_GROUNDED_THRESHOLD
-        )
+        grounded = 0
+        weakest_support = 1.0
+        for claim in claims:
+            support, _ = _best_claim_support(claim, context)
+            weakest_support = min(weakest_support, support)
+            if support >= max(_CLAIM_GROUNDED_THRESHOLD, _CLAIM_LEXICAL_THRESHOLD):
+                grounded += 1
         score = grounded / len(claims)
         passed = score >= _FAITHFULNESS_PASS_RATIO
         issues = (
@@ -100,7 +158,8 @@ class FaithfulnessCheck:
             if passed
             else [
                 f"faithfulness {score:.2f}: "
-                f"{len(claims) - grounded}/{len(claims)} claims ungrounded"
+                f"{len(claims) - grounded}/{len(claims)} claims ungrounded "
+                f"(weakest_support={weakest_support:.2f})"
             ]
         )
         return CheckResult(passed=passed, score=score, issues=issues)
@@ -110,8 +169,8 @@ class ContradictionCheck:
     def check(self, answer: str, context: str) -> CheckResult:
         if not context:
             return CheckResult(passed=True, score=1.0)
-        ctx_numbers = set(_NUMBER_RE.findall(context))
-        ans_numbers = set(_NUMBER_RE.findall(answer))
+        ctx_numbers = _normalized_numbers(context)
+        ans_numbers = _normalized_numbers(answer)
         if not ctx_numbers or not ans_numbers:
             return CheckResult(passed=True, score=1.0)
         if ans_numbers & ctx_numbers:

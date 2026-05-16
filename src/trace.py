@@ -4,25 +4,68 @@ import os
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
+
+from src.graph.trace_types import ExecutionTrace, ToolCallTrace
 
 _ENABLED = os.getenv("SLM_TRACE", "0") == "1"
 _request_id: str = ""
+_run_id: str = ""
 _t0: float = 0.0
 _span_stack: list[str] = []
+_subscribers: list[Callable[[str, dict[str, Any]], None]] = []
+_current_exec_trace: ExecutionTrace | None = None
+_tool_call_data: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def init() -> None:
-    global _request_id, _t0
+    global _request_id, _run_id, _t0, _current_exec_trace
     _request_id = uuid.uuid4().hex[:12]
+    _run_id = uuid.uuid4().hex[:12]
     _t0 = time.monotonic()
     _span_stack.clear()
+    _tool_call_data.clear()
+    _current_exec_trace = None
+
+
+def subscribe(callback: Callable[[str, dict[str, Any]], None]) -> None:
+    _subscribers.append(callback)
+
+
+def unsubscribe(callback: Callable[[str, dict[str, Any]], None]) -> None:
+    try:
+        _subscribers.remove(callback)
+    except ValueError:
+        pass
+
+
+def set_exec_trace(exec_trace: ExecutionTrace | None) -> None:
+    global _current_exec_trace
+    _current_exec_trace = exec_trace
+
+
+def set_run_id(run_id: str) -> None:
+    global _run_id
+    _run_id = run_id
+
+
+def get_run_id() -> str:
+    return _run_id
 
 
 def _emit(event: str, **fields: Any) -> None:
+    elapsed = (time.monotonic() - _t0) * 1000
+
+    enriched = dict(fields, run_id=_run_id)
+    for cb in _subscribers:
+        try:
+            cb(event, dict(enriched))
+        except Exception:
+            pass
+
     if not _ENABLED:
         return
-    elapsed = (time.monotonic() - _t0) * 1000
     parts = " ".join(f"{k}={v!r}" for k, v in fields.items())
     print(
         f"[trace] {event} {parts} rid={_request_id} elapsed={elapsed:.1f}ms",
@@ -51,11 +94,31 @@ def retrieval(source: str, query: str) -> None:
 
 
 def tool_call(tool_name: str, arguments: dict[str, Any]) -> None:
+    _tool_call_data[tool_name] = (time.monotonic(), arguments)
     _emit("tool.call", tool=tool_name, args=arguments)
 
 
 def tool_result(tool_name: str, success: bool, result: str) -> None:
+    elapsed_ms = 0.0
+    args: dict[str, Any] = {}
+    data = _tool_call_data.pop(tool_name, None)
+    if data is not None:
+        start_time, args = data
+        elapsed_ms = (time.monotonic() - start_time) * 1000
+
     _emit("tool.result", tool=tool_name, success=success, result=result[:120])
+
+    if _current_exec_trace is not None:
+        _current_exec_trace.add_tool_call(
+            ToolCallTrace(
+                tool_name=tool_name,
+                arguments=args,
+                result_summary=result[:120],
+                success=success,
+                elapsed_ms=round(elapsed_ms, 1),
+                error=None if success else result[:120],
+            )
+        )
 
 
 def plan(strategy: str, name: str, reason: str) -> None:

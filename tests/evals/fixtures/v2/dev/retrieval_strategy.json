@@ -1,0 +1,16 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "retrieval_strategy",
+  "cases": [
+    {"id": "retrieval-dev-protected-url-fetch", "cohort": "protected", "prompt": "read https://example.com", "expected_strategy": "url_fetch"},
+    {"id": "retrieval-dev-protected-reference-lookup", "cohort": "protected", "prompt": "which song says hello from the other side?", "expected_strategy": "reference_lookup"},
+    {"id": "retrieval-dev-protected-time-sensitive", "cohort": "protected", "prompt": "latest news about OpenAI", "expected_strategy": "time_sensitive"},
+    {"id": "retrieval-dev-protected-concept-lookup", "cohort": "protected", "prompt": "explain the SOLID principles", "expected_strategy": "concept_lookup"},
+    {"id": "retrieval-dev-protected-direct-what-is", "cohort": "protected", "prompt": "What is spaCy?", "expected_strategy": "direct_what_is", "force_no_entity": true},
+    {"id": "retrieval-dev-target-lowercase-what-is", "cohort": "target_improvement", "prompt": "what is spacy?", "expected_strategy": "direct_what_is", "force_no_entity": true},
+    {"id": "retrieval-dev-target-recommendation", "cohort": "target_improvement", "prompt": "recommend books about python", "expected_strategy": "recommendation_lookup"},
+    {"id": "retrieval-dev-target-entity-lookup", "cohort": "target_improvement", "prompt": "tell me about Ada Lovelace", "expected_strategy": "entity_lookup"},
+    {"id": "retrieval-dev-target-location-entity", "cohort": "target_improvement", "prompt": "where is Lisbon located", "expected_strategy": "entity_lookup"}
+  ]
+}

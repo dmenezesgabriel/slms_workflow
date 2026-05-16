@@ -1,0 +1,16 @@
+{
+  "version": "v2",
+  "split": "dev",
+  "capability": "tool_selection",
+  "cases": [
+    {"id": "tool-dev-protected-web-search", "cohort": "protected", "prompt": "search the web for python decorators", "expected_tool": "web_search", "expected_argument_key": "query", "expected_argument_contains": "python decorators"},
+    {"id": "tool-dev-protected-wikipedia", "cohort": "protected", "prompt": "look up the wikipedia article about Ada Lovelace", "expected_tool": "wikipedia", "expected_argument_key": "query", "expected_argument_contains": "Ada Lovelace"},
+    {"id": "tool-dev-protected-web-fetch", "cohort": "protected", "prompt": "fetch https://example.com/docs", "expected_tool": "web_fetch", "expected_argument_key": "url", "expected_argument_contains": "https://example.com/docs"},
+    {"id": "tool-dev-protected-calculator", "cohort": "protected", "prompt": "what is 3 plus 5", "expected_tool": "calculator", "expected_argument_key": "expression", "expected_argument_contains": "3 + 5"},
+    {"id": "tool-dev-protected-no-tool", "cohort": "protected", "prompt": "hello there", "expected_tool": "none", "expected_argument_key": "", "expected_argument_contains": ""},
+    {"id": "tool-dev-target-portuguese-openai", "cohort": "target_improvement", "prompt": "me fale sobre openai", "expected_tool": "wikipedia", "expected_argument_key": "query", "expected_argument_contains": "openai"},
+    {"id": "tool-dev-target-lowercase-spacy", "cohort": "target_improvement", "prompt": "o que e spacy", "expected_tool": "wikipedia", "expected_argument_key": "query", "expected_argument_contains": "spacy"},
+    {"id": "tool-dev-target-portuguese-search", "cohort": "target_improvement", "prompt": "pesquise por python decorators", "expected_tool": "web_search", "expected_argument_key": "query", "expected_argument_contains": "python decorators"},
+    {"id": "tool-dev-target-open-reference", "cohort": "target_improvement", "prompt": "open https://example.com/reference", "expected_tool": "web_fetch", "expected_argument_key": "url", "expected_argument_contains": "https://example.com/reference"}
+  ]
+}

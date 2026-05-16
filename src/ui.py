@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 from rich.align import Align
@@ -13,6 +13,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
+from src import trace as trace_module
 from src.text_utils import extract_text
 
 T = TypeVar("T")
@@ -99,3 +100,116 @@ class AssistantUI:
                 border_style="magenta",
             )
         )
+
+
+def _sanitize_args(tool_name: str, args: dict[str, Any]) -> str:
+    if not args:
+        return ""
+    if len(args) == 1 and "query" in args:
+        val = str(args["query"])
+        if len(val) > 60:
+            val = val[:57] + "..."
+        return f"({val})"
+    parts: list[str] = []
+    for k, v in args.items():
+        s = str(v)
+        if len(s) > 40:
+            s = s[:37] + "..."
+        parts.append(f"{k}={s!r}")
+    return f"({', '.join(parts)})"
+
+
+_HANDLER_SPANS = frozenset(
+    {
+        "question_answering",
+        "summarization",
+        "classification",
+        "general",
+        "image_understanding",
+    }
+)
+
+
+class StatusCollector:
+    def __init__(self, console: Console) -> None:
+        self._console = console
+        self._run_id = ""
+        self._subscribed = False
+
+    def subscribe(self) -> None:
+        if not self._subscribed:
+            trace_module.subscribe(self._on_event)
+            self._subscribed = True
+
+    def unsubscribe(self) -> None:
+        if self._subscribed:
+            trace_module.unsubscribe(self._on_event)
+            self._subscribed = False
+
+    def trace_hint(self) -> str:
+        if not self._run_id:
+            return ""
+        path = Path(f"artifacts/trace_{self._run_id}.json")
+        if path.exists():
+            return str(path)
+        return ""
+
+    def _on_event(self, event: str, fields: dict[str, Any]) -> None:
+        if fields.get("run_id"):
+            self._run_id = fields["run_id"]
+
+        if event == "route":
+            self._on_route(fields)
+        elif event == "plan":
+            self._on_plan(fields)
+        elif event == "plan.step":
+            self._on_plan_step(fields)
+        elif event == "dag.exec":
+            self._on_dag_exec(fields)
+        elif event == "tool.call":
+            self._on_tool_call(fields)
+        elif event == "tool.result":
+            self._on_tool_result(fields)
+        elif event == "span.enter":
+            self._on_span_enter(fields)
+
+    def _render(self, message: str) -> None:
+        self._console.print(f"[dim]{message}[/]")
+
+    def _on_route(self, fields: dict[str, Any]) -> None:
+        intent = fields.get("intent", "")
+        reason = fields.get("reason", "")
+        label = intent
+        if reason:
+            label += f" ({reason})"
+        self._render(f"route → {label}")
+
+    def _on_plan(self, fields: dict[str, Any]) -> None:
+        name = fields.get("name", "")
+        self._render(f"workflow → {name}")
+
+    def _on_plan_step(self, fields: dict[str, Any]) -> None:
+        strategy = fields.get("strategy", "")
+        detail = fields.get("detail", "")
+        if strategy in ("single", "composed_dag", "agent"):
+            self._render(f"workflow → {detail}")
+
+    def _on_dag_exec(self, fields: dict[str, Any]) -> None:
+        node = fields.get("node", "")
+        self._render(f"node → {node}")
+
+    def _on_tool_call(self, fields: dict[str, Any]) -> None:
+        tool = fields.get("tool", "")
+        args = fields.get("args", {})
+        summary = _sanitize_args(tool, args)
+        self._render(f"calling tool: {tool}{summary}")
+
+    def _on_tool_result(self, fields: dict[str, Any]) -> None:
+        success = fields.get("success", False)
+        status = "ok" if success else "failed"
+        self._render(f"  tool returned ({status})")
+
+    def _on_span_enter(self, fields: dict[str, Any]) -> None:
+        name = fields.get("name", "")
+        if name in _HANDLER_SPANS:
+            self._render(f"synthesizing → {name}")

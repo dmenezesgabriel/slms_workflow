@@ -243,3 +243,59 @@ class TestHandle:
         result = handler.handle(STATIC_PROMPT, llm)
 
         assert result == QuestionAnsweringResult(response=ANSWER, retrieved_context=CONTEXT)
+
+    def test_extracts_original_query_from_dag_formatted_input(self) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        handler, mock_retriever = self._make_handler(fetch_return=CONTEXT)
+        dag_input = "Context:\ntool result content\n\nQuestion: what is Python"
+
+        handler.handle(dag_input, llm)
+
+        mock_retriever.fetch_context.assert_called_once_with("what is Python")
+
+    def test_does_not_re_wrap_when_dag_formatted_input_has_no_additional_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        llm_request_class = MagicMock(return_value=LLM_REQUEST)
+        monkeypatch.setattr("src.handlers.question_answering.LLMRequest", llm_request_class)
+        handler, mock_retriever = self._make_handler(fetch_return=NO_CONTEXT)
+        dag_input = "Context:\ntool result content\n\nQuestion: what is Python"
+
+        handler.handle(dag_input, llm)
+
+        mock_retriever.fetch_context.assert_called_once_with("what is Python")
+        assert llm_request_class.call_args.kwargs["user"] == dag_input
+
+    def test_appends_additional_context_when_dag_formatted_input_has_retrieved_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        llm_request_class = MagicMock(return_value=LLM_REQUEST)
+        monkeypatch.setattr("src.handlers.question_answering.LLMRequest", llm_request_class)
+        handler, mock_retriever = self._make_handler(fetch_return="extra rag info")
+        dag_input = "Context:\ntool result content\n\nQuestion: what is Python"
+
+        handler.handle(dag_input, llm)
+
+        mock_retriever.fetch_context.assert_called_once_with("what is Python")
+        assert "Context:\ntool result content" in llm_request_class.call_args.kwargs["user"]
+        assert "Additional context:\nextra rag info" in llm_request_class.call_args.kwargs["user"]
+        assert "\n\nQuestion: what is Python" in llm_request_class.call_args.kwargs["user"]
+
+    def test_uses_rsplit_to_handle_question_in_tool_results(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        llm = MagicMock()
+        llm.structured.return_value = ANSWER
+        llm_request_class = MagicMock(return_value=LLM_REQUEST)
+        monkeypatch.setattr("src.handlers.question_answering.LLMRequest", llm_request_class)
+        handler, mock_retriever = self._make_handler(fetch_return=NO_CONTEXT)
+        dag_input = "Context:\nQuestion: what is the answer tool result\n\nQuestion: what is Python"
+
+        handler.handle(dag_input, llm)
+
+        mock_retriever.fetch_context.assert_called_once_with("what is Python")

@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Callable
 
 from pydantic import BaseModel
 
 from src import trace
 from src.graph.base import NodeRegistry
-from src.graph.dag import GraphNode, WorkflowGraph, run_graph
+from src.graph.dag import WorkflowGraph, run_graph
+from src.graph.trace_types import ExecutionTrace
 from src.llm_client import LLMClient
 from src.router import Router, route_task
 from src.schemas import IntentName
 from src.tools import ToolRegistry
+from src.trace_sink import (
+    FileTraceSink,
+    MultiSink,
+    TraceSink,
+    build_metrics_summary,
+    build_trace_from_run,
+    generate_run_id,
+    write_metrics_artifact,
+)
 from src.workflows.composer import DAGComposer
 from src.workflows.planner import Planner
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -24,6 +38,7 @@ class Orchestrator:
         tool_registry: ToolRegistry,
         planner: Planner | None = None,
         router: Router | None = None,
+        trace_sink: TraceSink | None = None,
     ) -> None:
         self.node_registry = node_registry
         self.tool_registry = tool_registry
@@ -33,6 +48,13 @@ class Orchestrator:
             tool_registry=tool_registry,
             router=self._router,
         )
+        self._trace_sink: MultiSink
+        if isinstance(trace_sink, MultiSink):
+            self._trace_sink = trace_sink
+        elif trace_sink is not None:
+            self._trace_sink = MultiSink([trace_sink])
+        else:
+            self._trace_sink = MultiSink([FileTraceSink()])
 
     def run(
         self,
@@ -40,7 +62,11 @@ class Orchestrator:
         llm: LLMClient,
         conversation_context: str | None = None,
     ) -> BaseModel:
+        run_id = generate_run_id()
+        trace.set_run_id(run_id)
+        start_time = time.monotonic()
         trace.span_enter("orchestrate")
+
         graph = self._planner.plan(user_input, llm)
         trace.plan("dag", graph.name, graph.description)
 
@@ -49,13 +75,51 @@ class Orchestrator:
             intent = graph.nodes[0].node.id
             dag_input = _contextualize(user_input, conversation_context, intent)
 
-        result, _trace = run_graph(graph, dag_input, llm)
+        result, exec_trace = run_graph(graph, dag_input, llm)
+
+        end_time = time.monotonic()
         trace.span_exit("orchestrate")
+
         if result is None:
             from src.schemas import FinalAnswer
 
-            return FinalAnswer(answer="No DAG node was executed for this request.")
+            result = FinalAnswer(answer="No DAG node was executed for this request.")
+
+        full_trace = build_trace_from_run(
+            run_id=run_id,
+            workflow_name=exec_trace.workflow_name,
+            workflow_description=graph.description,
+            route_strategy=self._resolve_route_strategy(graph),
+            route_confidence=1.0,
+            exec_trace=exec_trace,
+            start_time=start_time,
+            end_time=end_time,
+            final_status="completed",
+        )
+        self._emit_trace(full_trace)
+
         return result
+
+    def _emit_trace(self, full_trace: ExecutionTrace) -> None:
+        sink_failures: list[dict[str, str]] = []
+        try:
+            sink_failures = self._trace_sink.emit(full_trace)
+        except Exception:
+            logger.exception("Trace persistence failed, continuing")
+        try:
+            metrics = build_metrics_summary(full_trace)
+            metrics.sink_failures = sink_failures
+            write_metrics_artifact(metrics)
+        except Exception:
+            logger.exception("Metrics artifact writing failed, continuing")
+
+    @staticmethod
+    def _resolve_route_strategy(graph: WorkflowGraph) -> str:
+        if graph.name.startswith("on_demand"):
+            return "composed"
+        if graph.name == "agent":
+            return "agent"
+        return "single"
 
     def plan(self, user_input: str, llm: LLMClient) -> WorkflowGraph:
         return self._planner.plan(user_input, llm)
@@ -72,17 +136,38 @@ class Orchestrator:
     ) -> BaseModel:
         if intent is None:
             return self.run_direct(user_input, llm)
+        from src.graph.dag import GraphNode
+
+        run_id = generate_run_id()
+        trace.set_run_id(run_id)
+        start_time = time.monotonic()
         graph = WorkflowGraph(
             name=intent,
             description=f"Direct dispatch to {intent}.",
             nodes=(GraphNode("final", self.node_registry.resolve(intent), "{query}"),),
             final_node="final",
         )
-        result, _trace = run_graph(graph, user_input, llm)
+        result, exec_trace = run_graph(graph, user_input, llm)
+        end_time = time.monotonic()
+
         if result is None:
             from src.schemas import FinalAnswer
 
-            return FinalAnswer(answer="No DAG node was executed for this request.")
+            result = FinalAnswer(answer="No DAG node was executed for this request.")
+
+        full_trace = build_trace_from_run(
+            run_id=run_id,
+            workflow_name=exec_trace.workflow_name,
+            workflow_description=graph.description,
+            route_strategy="direct",
+            route_confidence=1.0,
+            exec_trace=exec_trace,
+            start_time=start_time,
+            end_time=end_time,
+            final_status="completed",
+        )
+        self._emit_trace(full_trace)
+
         return result
 
     @staticmethod
